@@ -33,9 +33,8 @@ class ObjFunction:
     def __init__(self, wfn, ham, len_pspace, dets):
         self.wfn = wfn
         self.ham = ham
-        # Fix: Add check for len property of dets
         self.pspace = dets[:len_pspace]
-        self.sspace = dets[len_pspace:]
+        self.sspace = dets
         self.ham_elements = self.eval_hamiltonian_terms()
 
     def eval_hamiltonian_terms(self):
@@ -51,10 +50,6 @@ class ObjFunction:
         return ham_elements
 
     def __call__(self, x):
-        # Fix needed: number of equation in objective
-        # has to be higher or equal than number
-        # of unknowns.
-        # O[numberunkn + 1]
         # Fix: Parameter asignation nees to be specific to the
         # FanCI wfn type.
         if isinstance(self.wfn, CIWavefunction):
@@ -63,17 +58,18 @@ class ObjFunction:
         elif isinstance(self.wfn, BaseGeminal):
             params = x[:-1].reshape(self.wfn.ngem, self.wfn.norbpair)
             self.wfn.assign_params = params
-
-        coeffs = np.empty_like(self.sspace, dtype=float)
+        
+        # Get S space coefficients
+        ovlps = np.empty_like(self.sspace, dtype=float)
         for idx, sd in enumerate(self.sspace):
-            coeffs[idx] = self.wfn.get_overlap(sd)
-        ovlps = np.empty_like(self.pspace, dtype=float)
-        for idx, sd in enumerate(self.pspace):
             ovlps[idx] = self.wfn.get_overlap(sd)
+        # ovlps = np.empty_like(self.pspace, dtype=float)
+        # for idx, sd in enumerate(self.pspace):
+        #     ovlps[idx] = self.wfn.get_overlap(sd)
         energy = x[-1]
         # \sum_{n} {<m|H|n> c_n - E \delta_{m,n} c_n}
-        f_vals = np.einsum("ij,j->i", self.ham_elements, coeffs)
-        f_vals -= energy * ovlps
+        f_vals = np.einsum("ij,j->i", self.ham_elements, ovlps)
+        f_vals -= energy * ovlps[:len_pspace]
         return f_vals
 
 
@@ -98,24 +94,20 @@ class JacFun:
         energy = x[-1]
         size_wfnprms = len(x[:-1])
         
-        # Jacobian equation
-        # d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
-        jac = np.empty((len(pspace), len(x)))
         # d(<m|H|\Psi>)/dp_k = \sum_n {<m|H|n> dc_n/dp_k}
-        dcoeffs = [
-            [wfn.get_overlap(sd, deriv=idx) for idx in range(size_wfnprms)]
-            for sd in sspace
-        ]
-        hamdc = np.einsum("ij,jl->il", ham_elements, dcoeffs)
-        jac[: len(pspace), :-1] = hamdc
-        # E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} dc_n/dp_k}
         # Taken from FanPy
         dovlps = [
             [wfn.get_overlap(sd, deriv=idx) for idx in range(size_wfnprms)]
-            for sd in pspace
+            for sd in sspace
         ]
         dovlps = np.array(dovlps)
-        jac[: len(pspace), :-1] -= energy * dovlps
+        # Jacobian equation
+        # d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
+        jac = np.empty((len(pspace), len(x)))
+        hamdc = np.einsum("ij,jl->il", ham_elements, dovlps)
+        jac[: len(pspace), :-1] = hamdc
+        # E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} dc_n/dp_k}
+        jac[: len(pspace), :-1] -= energy * dovlps[len(pspace),:]
         # (E/dp_k) <m|\Psi> = (E / dp_k) \sum_n {\delta_{m,n} c_n}
         denergy = -np.array([wfn.get_overlap(sd) for sd in pspace])
         jac[:, -1] = denergy.T
@@ -162,7 +154,7 @@ if __name__ == "__main__":
     # (sset, PyCI wfn) to FanCI.
     # CI wavefunction case
     #######################
-    ## sdets = dets[len_pspace:]
+    ## sdets = dets
     ## fanciwfn = CIWavefunction(nelec, ham.nspin, params=None, memory="1gb", sd_vec=sdets)
 
 
@@ -176,7 +168,8 @@ if __name__ == "__main__":
     ## refsd = 0b001001
     ## fanciwfn = AP1roG(nelec, nspin, ref_sd=refsd, orbpairs=None)
     fanciwfn = APIG(nelec, nspin)
-    ## print(fanciwfn.params)
+    # print(fanciwfn.params)
+    # print(fanciwfn.norbpair)
 
 
     # Try objective and jacobian functions.
