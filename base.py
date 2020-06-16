@@ -33,8 +33,8 @@ class FanCIBase(abc.ABC):
         self.pspace_dets = self.det_array[: self.len_pspace]
         self.pspace_occs = self.occs_array[: self.len_pspace]
         # Define array of dets/occs for fanCI space "S"
-        self.sspace_dets = self.det_array[self.len_sspace]
-        self.sspace_occs = self.occs_array[self.len_sspace]
+        self.sspace_dets = self.det_array[: self.len_sspace]
+        self.sspace_occs = self.occs_array[: self.len_sspace]
         # Initialize compute_overlap function
         self.compute_overlap = self.init_overlap()
         # Initialize pyci matrix operator with dimensions (pspace, sspace)
@@ -66,7 +66,7 @@ class FanCIBase(abc.ABC):
         r"""
         """
         # Compute overlaps of determinants in sspace
-        ovlp_vals = self.compute_overlap(self.sspace_occs)
+        ovlp_vals = self.compute_overlap(x[:-1], self.sspace_occs)
         # Compute:
         #     \sum_{n} {<m|H|n> c_n - E \delta_{m,n} c_n}
         # Note: x[-1] == Energy
@@ -82,18 +82,18 @@ class FanCIBase(abc.ABC):
         # d(<m|H|\Psi>)/dp_k = \sum_n {<m|H|n> dc_n/dp_k}
         # Taken from FanPy
         size_wfnprms = len(x[:-1])
-        # compute_overlap function should also return
-        # the overlap derivatives
-        dovlp_vals = [
-            self.compute_overlap(self.sspace_occs, deriv=idx)
-            for idx in range(size_wfnprms)
-        ]
         # Jacobian equation
         # d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
         jac = np.empty((self.len_pspace, len(x)))
-        jac[:, :-1] = self.ci_matrix_op.dot(dovlp_vals.T)
-        # E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} dc_n/dp_k}
-        jac[:, :-1] -= x[-1] * dovlp_vals[:, self.len_pspace].T
+        for idx in range(size_wfnprms):
+            # compute_overlap function should also return
+            # the overlap derivatives
+            dovlp_vals = self.compute_overlap(x[:-1], self.sspace_occs, deriv=idx)
+            jac[:, idx] = self.ci_matrix_op.dot(dovlp_vals)
+            # E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} dc_n/dp_k}
+            jac[:, idx] -= (
+                x[-1] * dovlp_vals[: self.len_pspace]
+            )  # alter: self.compute_overlap(self.pspace_occs, deriv=idx)
         # (E/dp_k) <m|\Psi> = (E / dp_k) \sum_n {\delta_{m,n} c_n}
         # Compute overlaps of determinants in pspace
         ovlp_vals = self.compute_overlap(self.pspace_occs)
