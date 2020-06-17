@@ -1,18 +1,28 @@
 r"""
-Refactor objective function
+FanCI base class module.
 
 """
 
-import numpy as np
-
 import abc
 
+import numpy as np
 
-class FanCIBase(abc.ABC):
+from pyci import sparse_op
+
+
+__all__ = [
+    'BaseFanCI',
+    'BaseOverlap',
+    ]
+
+
+class BaseFanCI(abc.ABC):
     r"""
+    FanCI problem base class.
+
     """
 
-    def __init__(self, ham, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         r"""
         Initialize the FanCI problem.
 
@@ -21,34 +31,28 @@ class FanCIBase(abc.ABC):
         self.nbasis = None
         self.nocc_up = None
         self.nocc_dn = None
-        self.len_pspace = None
-        self.len_sspace = None
+        self.ndet_pspace = None
+        self.ndet_sspace = None
+        self.ham = None
         self.wfn = None
-
-        # Save ham attribute
-        self.ham = ham
 
         # Initialize system
         self.init_system(*args, **kwargs)
 
-        # Initialize compute_overlap function
-        self.compute_overlap = self.init_overlap(*args, **kwargs)
-
-        # Initialize compute_overlap_deriv function
-        self.compute_overlap_deriv = self.init_overlap_deriv(*args, **kwargs)
-
-        # Initialize pyci matrix operator with dimensions (pspace, sspace)
-        self.matrix_op = sparse_op(self.ham, self.wfn, self.len_pspace)
-
         # Initialize arrays of determinants
         self.det_array = self.wfn.to_det_array()
-        self.pspace_dets = self.det_array[:self.len_pspace]
-        self.sspace_dets = self.det_array[:self.len_sspace]
-
+        self.pspace_dets = self.det_array[:self.ndet_pspace]
+        self.sspace_dets = self.det_array[:self.ndet_sspace]
         # Initialize arrays of occupations
         self.occs_array = self.wfn.to_occs_array()
-        self.pspace_occs = self.occs_array[:self.len_pspace]
-        self.sspace_occs = self.occs_array[:self.len_sspace]
+        self.pspace_occs = self.occs_array[:self.ndet_pspace]
+        self.sspace_occs = self.occs_array[:self.ndet_sspace]
+
+        # Initialize FanCI overlap and overlap derivative operator
+        self.fanci_op = self.init_overlap(*args, **kwargs)
+
+        # Compute PyCI CI matrix operator with dimensions (pspace, sspace)
+        self.ci_op = sparse_op(self.ham, self.wfn, self.ndet_pspace)
 
     @abc.abstractmethod
     def init_system(self, *args, **kwargs):
@@ -59,46 +63,36 @@ class FanCIBase(abc.ABC):
         # Create your CI wfn here and return it
         #
         # Example:
+        #
+        #     self.ham = ...
+        #     self.wfn = ...
         #     self.nbasis = ...
         #     self.nocc_up = ...
         #     self.nocc_dn = ...
-        #     self.len_pspace = ...
-        #     self.len_sspace = ...
-        #     self.wfn = ...
+        #     self.ndet_pspace = ...
+        #     self.ndet_sspace = ...
         #
         raise NotImplementedError('this method must be overwritten in a sub-class')
 
     @abc.abstractmethod
     def init_overlap(self, *args, **kwargs):
         r"""
-        Initialize the compute_overlap() function.
+        Initialize the FanCI overlap operator.
 
         """
-        # Create your callable() here and return it
+        # Create your object here and return it
         #
-        #     f : x[m], occs_array[n, :] -> y[n]
+        #     obj.overlap:
         #
-        # Example:
-        #     def f(x, occs_array):
-        #         pass
-        #     return f
+        #       f : x[m], occs_array[n, :] -> y[n]
         #
-        raise NotImplementedError('this method must be overwritten in a sub-class')
-
-    @abc.abstractmethod
-    def init_overlap_deriv(self, *args, **kwargs):
-        r"""
-        Initialize the compute_overlap_deriv() function.
-
-        """
-        # Create your callable() here and return it
+        #     obj.overlap_deriv:
         #
-        #     f : x[m], occs_array[n, :] -> y[m, n]
+        #       j : x[m], occs_array[n, :] -> y[m, n]
         #
         # Example:
-        #     def f(x, occs_array):
-        #         pass
-        #     return f
+        #
+        #     return ExampleOverlap(*args, **kwargs)
         #
         raise NotImplementedError('this method must be overwritten in a sub-class')
 
@@ -108,15 +102,15 @@ class FanCIBase(abc.ABC):
 
         """
         # Compute overlaps ``c_n`` of determinants in sspace
-        ovlp_vals = self.compute_overlap(x[:-1], self.sspace_occs)
+        ovlp_vals = self.fanci_op.overlap(x[:-1], self.sspace_occs)
 
         # Compute:
+        #
         #     \sum_{n} {<m|H|n> c_n - E \delta_{m,n} c_n}
         #
-        # Note: x[-1] == Energy
-        #
-        f_vals = self.matrix_op.dot(ovlp_vals)
-        f_vals -= x[-1] * ovlp_vals[:self.len_pspace]
+        energy = x[-1]
+        f_vals = self.ci_op.dot(ovlp_vals)
+        f_vals -= energy * ovlp_vals[:self.ndet_pspace]
         return f_vals
 
     def compute_jacobian(self, x):
@@ -124,36 +118,40 @@ class FanCIBase(abc.ABC):
         Compute the FanCI Jacobian function.
 
         """
+        # Allocate jacobian matrix
+        #
+        jac_vals = np.empty((self.ndet_pspace, x.size), dtype=x.dtype)
+
         # Compute overlaps in pspace:
+        #
         #     c_n
-        ovlp_vals = self.compute_overlap(x[:-1], self.pspace_occs)
+        #
+        ovlp_vals = self.fanci_op.overlap(x[:-1], self.pspace_occs)
 
         # Compute overlap derivatives in sspace:
+        #
         #     d(c_m)/d(p_k)
-        d_ovlp_vals = self.compute_overlap_deriv(x[:-1], self.sspace_occs)
-
-        # Allocate jacobian matrix
-        jac_vals = np.empty((self.len_pspace, x.size), dtype=x.dtype)
-
-        # Compute rows of jac:
-        #     d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
         #
-        # Note:
-        #     x[-1] == Energy
-        #
-        # And we use:
-        #     E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} dc_n/dp_k}
-        #
-        # TODO: Not sure about the math here
-        # Iterate over rows of jac_vals and d_ovlp_vals
-        for jac_row, d_ovlp_row in zip(jac_vals[:, :-1], d_ovlp_vals):
-            jac_row[:] = self.matrix_op.dot(d_ovlp_row)
-            jac_row[:] -= x[-1] * d_ovlp_row[:self.len_pspace]
+        d_ovlp_vals = self.fanci_op.overlap_deriv(x[:-1], self.sspace_occs)
 
-        # TODO: Not sure about the math here
-        # Compute final column of jac_vals:
-        #     (E/dp_k) <m|\Psi> = (E / dp_k) \sum_n {\delta_{m,n} c_n}
-        jac_vals[:, -1] = -x[-1] * ovlp_vals
+        # Iterate over rows of jac_vals (except final row) and d_ovlp_vals
+        for jac_row, d_ovlp_row in zip(jac_vals[:-1], d_ovlp_vals):
+            #
+            # Compute rows of jac:
+            #
+            #     d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
+            #
+            #     E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} (dc_n/dp_k)}
+            #
+            energy = x[-1]
+            self.ci_op.dot(d_ovlp_row, out=jac_row)
+            jac_row[:] -= energy * d_ovlp_row[:self.ndet_pspace]
+
+        # Compute final row of jac_vals:
+        #
+        #     (dE/dp_k) <m|\Psi> = (dE/dp_k) \sum_n {\delta_{m,n} c_n}
+        #
+        jac_vals[-1, :] = -energy * ovlp_vals
         return jac_vals
 
     def solve_fanci(self):
@@ -162,3 +160,32 @@ class FanCIBase(abc.ABC):
 
         """
         raise NotImplementedError('implement this please')
+
+
+class BaseOverlap(abc.ABC):
+    r"""
+    FanCI overlap base class.
+
+    """
+
+    @abc.abstractmethod
+    def overlap(self, *args, **kwargs):
+        r"""
+        Compute the overlap vector.
+
+        """
+        #
+        # f : x[m], occs_array[n, :] -> y[n]
+        #
+        raise NotImplementedError('this method must be overwritten in a sub-class')
+
+    @abc.abstractmethod
+    def overlap_deriv(self, *args, **kwargs):
+        r"""
+        Compute the overlap derivative matrix.
+
+        """
+        #
+        # j : x[m], occs_array[n, :] -> y[m, n]
+        #
+        raise NotImplementedError('this method must be overwritten in a sub-class')
