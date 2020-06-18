@@ -86,11 +86,11 @@ class BaseFanCI(abc.ABC):
         #
         #     obj.overlap:
         #
-        #       f : x[m], occs_array[n, :] -> y[n]
+        #       f : x[k], occs_array[m, :] -> y[m]
         #
         #     obj.overlap_deriv:
         #
-        #       j : x[m], occs_array[n, :] -> y[m, n]
+        #       j : x[k], occs_array[m, :] -> y[m, k]
         #
         # Example:
         #
@@ -103,27 +103,33 @@ class BaseFanCI(abc.ABC):
         Compute the FanCI objective function.
 
         """
-        # Compute overlaps ``c_n`` of determinants in sspace
+        # Compute overlaps of determinants in sspace:
         #
-        ovlp_vals = self.fanci_op.overlap(x[:-1], self.sspace_occs)
+        #   c_m
+        #
+        ovlp = self.fanci_op.overlap(x[:-1], self.sspace_occs)
 
-        # Compute:
+        # Compute objective function:
         #
-        #     \sum_{n} {<m|H|n> c_n - E \delta_{m,n} c_n}
+        #   f_n = <n|H|\Psi> - E <n|\Psi>
+        #
+        #       = <m|H|n> c_m - E \delta_{mn} c_m
         #
         energy = x[-1]
-        f_vals = self.ci_op.dot(ovlp_vals)
-        f_vals -= energy * ovlp_vals[:self.ndet_pspace]
-        return f_vals
+        f = self.ci_op.dot(ovlp)
+        f -= energy * ovlp[:self.ndet_pspace]
+        return f
 
     def compute_jacobian(self, x):
         r"""
         Compute the FanCI Jacobian function.
 
         """
-        # Allocate jacobian matrix
+        # Allocate Jacobian matrix transpose:
         #
-        jac_vals = np.empty((self.ndet_pspace, x.size), dtype=x.dtype)
+        #   {J^T}_{kn}
+        #
+        jac_t = np.empty((x.size, self.ndet_pspace), dtype=x.dtype)
 
         # Assign Energy = x[-1]
         #
@@ -131,36 +137,45 @@ class BaseFanCI(abc.ABC):
 
         # Compute overlaps in pspace:
         #
-        #     c_n
+        #   c_n
         #
-        ovlp_vals = self.fanci_op.overlap(x[:-1], self.pspace_occs)
+        ovlp = self.fanci_op.overlap(x[:-1], self.pspace_occs)
 
         # Compute overlap derivatives in sspace:
         #
-        #     d(c_m)/d(p_k)
+        #   d(c_m)/d(p_k)
         #
-        d_ovlp_vals = self.fanci_op.overlap_deriv(x[:-1], self.sspace_occs)
+        d_ovlp = self.fanci_op.overlap_deriv(x[:-1], self.sspace_occs)
 
-        # Iterate over rows of jac_vals (excluding final column) and d_ovlp_vals
+        # Compute Jacobian:
         #
-        for jac_row, d_ovlp_row in zip(jac_vals[:, :-1], d_ovlp_vals):
+        #   J_{nk} = d(<n|H|\Psi>)/d(p_k) - E d(<n|\Psi>)/d(p_k) - dE/d(p_k) <n|\Psi>
+        #
+        # Iterate over columns of Jacobian (excluding final column) and rows of d_ovlp
+        #
+        for jac_col, d_ovlp_row in zip(jac_t[:-1], d_ovlp):
             #
-            # Compute rows of jac:
+            # Compute each column of the Jacobian:
             #
-            #     d(<m|H|\Psi>)/dp_k - E d(<m|\Psi>)/dp_k - (dE/dp_k) <m|\Psi>
+            #   d(<n|H|\Psi>)/d(p_k) = <m|H|n> d(c_m)/d(p_k)
             #
-            #     E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} (dc_n/dp_k)}
+            #   E d(<n|\Psi>)/d(p_k) = E \delta_{nk} d(c_n)/d(p_k)
             #
-            self.ci_op.dot(d_ovlp_row, out=jac_row)
-            jac_row -= energy * d_ovlp_row[:self.ndet_pspace]
+            self.ci_op.dot(d_ovlp_row, out=jac_col)
+            jac_col -= energy * d_ovlp_row[:self.ndet_pspace]
 
-        # Compute final column of jac_vals:
+        # Compute final column of the Jacobian:
         #
-        #     (dE/dp_k) <m|\Psi> = (dE/dp_k) \sum_n {\delta_{m,n} c_n}
+        #   dE/d(p_k) <n|\Psi> = dE/d(p_k) \delta_{nk} c_n
         #
-        jac_vals[:, -1] = ovlp_vals
-        jac_vals[:, -1] *= -1
-        return jac_vals
+        jac_t[-1, :] = ovlp
+        jac_t[-1, :] *= -1
+
+        # Return the Jacobian proper, i.e., from the allocated Jacobian transpose matrix:
+        #
+        #   J_{nk} = {(J^T)^T}_{nk}
+        #
+        return jac_t.transpose()
 
     def solve_fanci(self, x0, *args, **kwargs):
         r"""
@@ -183,7 +198,7 @@ class BaseOverlap(abc.ABC):
 
         """
         #
-        # f : x[m], occs_array[n, :] -> y[n]
+        # f : x[k], occs_array[m, :] -> y[m]
         #
         raise NotImplementedError('this method must be overwritten in a sub-class')
 
@@ -194,6 +209,6 @@ class BaseOverlap(abc.ABC):
 
         """
         #
-        # j : x[m], occs_array[n, :] -> y[m, n]
+        # j : x[k], occs_array[m, :] -> y[m, k]
         #
         raise NotImplementedError('this method must be overwritten in a sub-class')
