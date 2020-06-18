@@ -7,6 +7,8 @@ import abc
 
 import numpy as np
 
+from scipy.optimize import root
+
 from pyci import sparse_op
 
 
@@ -102,6 +104,7 @@ class BaseFanCI(abc.ABC):
 
         """
         # Compute overlaps ``c_n`` of determinants in sspace
+        #
         ovlp_vals = self.fanci_op.overlap(x[:-1], self.sspace_occs)
 
         # Compute:
@@ -122,6 +125,10 @@ class BaseFanCI(abc.ABC):
         #
         jac_vals = np.empty((self.ndet_pspace, x.size), dtype=x.dtype)
 
+        # Assign Energy = x[-1]
+        #
+        energy = x[-1]
+
         # Compute overlaps in pspace:
         #
         #     c_n
@@ -134,8 +141,9 @@ class BaseFanCI(abc.ABC):
         #
         d_ovlp_vals = self.fanci_op.overlap_deriv(x[:-1], self.sspace_occs)
 
-        # Iterate over rows of jac_vals (except final row) and d_ovlp_vals
-        for jac_row, d_ovlp_row in zip(jac_vals[:-1], d_ovlp_vals):
+        # Iterate over rows of jac_vals (excluding final column) and d_ovlp_vals
+        #
+        for jac_row, d_ovlp_row in zip(jac_vals[:, :-1], d_ovlp_vals):
             #
             # Compute rows of jac:
             #
@@ -143,23 +151,23 @@ class BaseFanCI(abc.ABC):
             #
             #     E <m|\Psi>/dp_k = E \sum_n {\delta_{m,n} (dc_n/dp_k)}
             #
-            energy = x[-1]
             self.ci_op.dot(d_ovlp_row, out=jac_row)
-            jac_row[:] -= energy * d_ovlp_row[:self.ndet_pspace]
+            jac_row -= energy * d_ovlp_row[:self.ndet_pspace]
 
-        # Compute final row of jac_vals:
+        # Compute final column of jac_vals:
         #
         #     (dE/dp_k) <m|\Psi> = (dE/dp_k) \sum_n {\delta_{m,n} c_n}
         #
-        jac_vals[-1, :] = -energy * ovlp_vals
+        jac_vals[:, -1] = ovlp_vals
+        jac_vals[:, -1] *= -1
         return jac_vals
 
-    def solve_fanci(self):
+    def solve_fanci(self, x0, *args, **kwargs):
         r"""
         Solve the FanCI problem.
 
         """
-        raise NotImplementedError('implement this please')
+        return root(self.compute_objective, x0, jac=self.compute_jacobian, *args, **kwargs)
 
 
 class BaseOverlap(abc.ABC):
