@@ -7,7 +7,7 @@ import numpy as np
 
 from pyci import doci
 
-from base import BaseFanCI, BaseOverlap
+from objective.base import BaseFanCI, BaseOverlap
 
 
 __all___ = [
@@ -20,25 +20,25 @@ class APIGFanCI(BaseFanCI):
     APIG FanCI class.
 
     """
-    def __init__(self, ham, nocc, len_pspace=None):
+    def __init__(self, ham, nocc, ndet_pspace=None):
         r"""
         Initialize the APIG FanCI problem.
 
         """
         # handle default arguments
-        if len_pspace is None:
-            len_pspace = ham.nbasis * nocc
+        if ndet_pspace is None:
+            ndet_pspace = ham.nbasis * nocc
 
         # check system dimensions
         if ham.nbasis < nocc:
             raise ValueError('ham.nbasis must be >= nocc')
-        if len_pspace < ham.nbasis * nocc:
-            raise ValueError('len_pspace must be >= ham.nbasis * nocc')
+        if ndet_pspace < ham.nbasis * nocc:
+            raise ValueError('ndet_pspace must be >= ham.nbasis * nocc')
 
         # Initialize base class
-        super().__init__(ham, nocc, len_pspace)
+        super().__init__(ham, nocc, ndet_pspace)
 
-    def init_system(self, ham, nocc, len_pspace):
+    def init_system(self, ham, nocc, ndet_pspace):
         r"""
         Initialize the system dimensions and CI wavefunction.
 
@@ -48,16 +48,16 @@ class APIGFanCI(BaseFanCI):
 
         # build doci wavefunction
         self.wfn = doci.wfn(ham.nbasis, nocc)
-        wfn.add_all_dets()
+        self.wfn.add_all_dets()
 
         # assign system dimensions
         self.nbasis = ham.nbasis
         self.nocc_up = nocc
         self.nocc_dn = nocc
-        self.len_pspace = len_pspace
-        self.len_sspace = len(wfn)
+        self.ndet_pspace = ndet_pspace
+        self.ndet_sspace = len(self.wfn)
 
-    def init_overlap(self, ham, nocc, len_pspace):
+    def init_overlap(self, ham, nocc, ndet_pspace):
         r"""
         Initialize the FanCI overlap operator.
 
