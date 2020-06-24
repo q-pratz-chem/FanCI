@@ -49,6 +49,8 @@ class APIGFanCI(BaseFanCI):
         # build doci wavefunction
         self.wfn = doci.wfn(ham.nbasis, nocc)
         self.wfn.add_all_dets()
+        if len(self.wfn) < ndet_pspace:
+            raise ValueError('Cannot generate `len_pspace` determinants')
 
         # assign system dimensions
         self.nbasis = ham.nbasis
