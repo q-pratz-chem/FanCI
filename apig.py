@@ -20,7 +20,7 @@ class APIGFanCI(BaseFanCI):
     APIG FanCI class.
 
     """
-    def __init__(self, ham, nocc, ndet_pspace=None):
+    def __init__(self, ham, nocc, norm_det=-1, norm_param=-1, ndet_pspace=None):
         r"""
         Initialize the APIG FanCI problem.
 
@@ -36,7 +36,7 @@ class APIGFanCI(BaseFanCI):
             raise ValueError('ndet_pspace must be >= ham.nbasis * nocc')
 
         # Initialize base class
-        super().__init__(ham, nocc, ndet_pspace)
+        super().__init__(ham, nocc, norm_det=-1, norm_param=-1, ndet_pspace=None)
 
     def init_system(self, ham, nocc, ndet_pspace):
         r"""
