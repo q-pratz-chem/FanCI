@@ -3,13 +3,30 @@ FanCI test module.
 
 """
 
-import os
+from os import path
 
 
 __all__ = [
-    "find_datafile",
+    'find_datafile',
     ]
 
 
-def find_datafile(file_name):
-    return os.path.join(os.path.dirname(__file__), file_name)
+DATAPATH = path.join(path.abspath(path.dirname(__file__)), 'data/')
+
+
+def find_datafile(filename):
+    r"""
+    Return the full path of a FanCI test data file.
+
+    Parameters
+    ----------
+    filename : str
+        Name of data file.
+
+    Returns
+    -------
+    datafile : str
+        Path to data file.
+
+    """
+    return path.abspath(path.join(DATAPATH, filename))
