@@ -50,7 +50,7 @@ packages = [
 
 
 package_data = {
-    'fanci.test': ['data/*.npz'],
+    'fanci.test': ['data/*.npy'],
     }
 
 
