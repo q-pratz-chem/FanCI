@@ -1,4 +1,4 @@
-""" Test APIGFanCI"""
+""" Test APIG"""
 
 import os
 
@@ -10,7 +10,7 @@ from scipy.optimize import least_squares
 
 import pyci
 
-from fanci.apig import APIGFanCI
+from fanci import APIG
 from fanci.test import find_datafile
 
 
@@ -20,17 +20,17 @@ def test_apigfanci_init():
     nbasis = 10
     one_mo = np.arange(nbasis ** 2, dtype=pyci.c_double).reshape(nbasis, nbasis)
     two_mo = np.arange(nbasis ** 4, dtype=pyci.c_double).reshape((nbasis,)*4)
-    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
 
     nocc = 2
-    apig = APIGFanCI(ham, nocc)
-    assert apig.ndet == ham.nbasis * nocc + 1
+    apig = APIG(ham, nocc)
+    assert apig.nproj == ham.nbasis * nocc + 1
     with pytest.raises(ValueError):
-        APIGFanCI(ham, nocc, ndet=10000000)
+        APIG(ham, nocc, nproj=10000000)
 
     nocc = 11
     with pytest.raises(ValueError):
-        APIGFanCI(ham, nocc)
+        APIG(ham, nocc)
 
 
 def test_apigfanci_init_system():
@@ -39,23 +39,23 @@ def test_apigfanci_init_system():
     nbasis=3
     one_mo = np.arange(9, dtype=float).reshape(nbasis, nbasis)
     two_mo = np.arange(9*9, dtype=float).reshape((nbasis,)*4)
-    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
     nocc = 2
     with pytest.raises(ValueError):
-        APIGFanCI(ham, nocc, ndet=6)
+        APIG(ham, nocc, nproj=6)
 
     nbasis=6
     one_mo = np.arange(36, dtype=float).reshape(nbasis, nbasis)
     two_mo = np.arange(36*36, dtype=float).reshape((nbasis,)*4)
-    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
     nocc = 2
-    apig = APIGFanCI(ham, nocc, ndet=None)
+    apig = APIG(ham, nocc, nproj=None)
     assert apig.ham == ham
     assert apig.nbasis == nbasis
     assert apig.nocc_up == nocc
     assert apig.nocc_dn == nocc
-    #assert apig.ndet == 12
-    #assert apig.ndet == 15
+    #assert apig.nproj == 12
+    #assert apig.nproj == 15
 
 
 def test_apigfanci_init_overlap():
@@ -83,17 +83,17 @@ def test_apigfanci_compute_objective():
     nbasis = 2
     one_mo = np.arange(1, 5, dtype=float).reshape(nbasis, nbasis)
     two_mo = np.arange(1,17, dtype=float).reshape((nbasis,)*4)
-    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
     wfn = pyci.doci_wfn(ham.nbasis, nocc)
     wfn.add_all_dets()
-    ndet = 2
+    nproj = 2
     params = np.array([3., 2., 1.])
 
-    apig = APIGFanCI(ham, nocc, ndet=2)
+    apig = APIG(ham, nocc, nproj=2)
     #objective = apig.compute_objective(params)
-    #assert objective.size == apig.ndet
+    #assert objective.size == apig.nproj
 
-    op = pyci.sparse_op(ham, wfn, ndet)
+    op = pyci.sparse_op(ham, wfn, nproj)
     hmlt_mtx = op.to_csr_matrix().toarray()
     # ovlp = [1., 2.]
     # answer = [3.*1. + 4.*2. - 3.*1.,
@@ -107,22 +107,22 @@ def test_apigfanci_compute_objective():
     nbasis = 6
     one_mo = np.arange(6*6, dtype=float).reshape(nbasis, nbasis)
     two_mo = np.arange(36*36, dtype=float).reshape((nbasis,)*4)
-    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
-    # ndet = 6 choose 2 = 15
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    # nproj = 6 choose 2 = 15
     wfn = pyci.doci_wfn(ham.nbasis, nocc)
     wfn.add_all_dets()
-    ndet = nocc * nbasis
+    nproj = nocc * nbasis
     params = np.array([float(i+1) for i in range(13)])
 
-    apig = APIGFanCI(ham, nocc, ndet=None)
+    apig = APIG(ham, nocc, nproj=None)
     #objective = apig.compute_objective(params)
-    #assert objective.size == apig.ndet
+    #assert objective.size == apig.nproj
 
-    op = pyci.sparse_op(ham, wfn, ndet)
+    op = pyci.sparse_op(ham, wfn, nproj)
     #hmlt_mtx = op.to_csr_matrix().toarray()
     # ovlp = [1, 2, 3, 4, 5, ..., 15]
     ovlp = np.array(np.arange(1, 16, dtype=params.dtype))
-    answer = op(ovlp) - params[-1]*ovlp[:ndet]
+    answer = op(ovlp) - params[-1]*ovlp[:nproj]
     assert np.allclose(objective, answer)
 
 
@@ -146,8 +146,8 @@ def test_apig_h2_sto6g_ground():
     two_int = np.load(find_datafile("data_h2_hf_sto6g_twoint.npy"))
     nuc_nuc = 0.71317683129
     params = np.array([1., 0., -1.])
-    ham = pyci.hamiltonian(nuc_nuc, one_int, two_int)
-    apig = APIGFanCI(ham, nocc, ndet=2)
+    ham = pyci.restricted_ham(nuc_nuc, one_int, two_int)
+    apig = APIG(ham, nocc, nproj=2)
 
     #results = least_squares(apig.compute_objective, params)
     apig_energy = results.x[-1]
@@ -156,7 +156,7 @@ def test_apig_h2_sto6g_ground():
 
 test_apigfanci_init()
 test_apigfanci_init_system()
-test_apigoverlap_overlap()
+#test_apigoverlap_overlap()
 test_apigoverlap_permanent()
 test_apigfanci_compute_objective()
 test_apig_h2_sto6g_ground()

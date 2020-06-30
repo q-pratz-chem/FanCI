@@ -5,10 +5,12 @@ FanCI module.
 
 
 __all__ = [
-    'APIGFanCI',
-    'AP1roGFanCI',
+    'FanCI',
+    'APIG',
+    'AP1roG',
     ]
 
 
-from fanci.apig import APIGFanCI
-from fanci.ap1rog import AP1roGFanCI
+from .fanci import FanCI
+from .apig import APIG
+from .ap1rog import AP1roG

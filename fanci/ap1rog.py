@@ -3,25 +3,27 @@ FanCI AP1roG module.
 
 """
 
+from itertools import product
+
 import numpy as np
 
 import pyci
 
-from fanci.base import BaseFanCI
-from fanci.apig import APIGFanCI
+from .fanci import FanCI
+from .apig import APIG
 
 
 __all___ = [
-    'AP1roGFanCI',
+    'AP1roG',
     ]
 
 
-class AP1roGFanCI(APIGFanCI):
+class AP1roG(APIG):
     r"""
     AP1roG FanCI class.
 
     """
-    def __init__(self, ham, nocc, ndet=None, wfn=None, **kwargs):
+    def __init__(self, ham, nocc, nproj=None, wfn=None, **kwargs):
         r"""
         Initialize the FanCI problem.
 
@@ -31,7 +33,7 @@ class AP1roGFanCI(APIGFanCI):
             Hamiltonian.
         nocc : int
             Number of occupied indices.
-        ndet : int, optional
+        nproj : int, optional
             Number of determinants in P space.
         wfn : pyci.doci_wfn, optional
             If specified, this wfn defines the P space.
@@ -40,8 +42,8 @@ class AP1roGFanCI(APIGFanCI):
         # Compute number of parameters (c_kl + energy)
         nparam = nocc * (ham.nbasis - nocc) + 1
 
-        # Handle default ndet
-        ndet = nparam if ndet is None else ndet
+        # Handle default nproj
+        nproj = nparam if nproj is None else nproj
 
         # Handle default wfn (P space == single pair excitations)
         if wfn is None:
@@ -54,7 +56,7 @@ class AP1roGFanCI(APIGFanCI):
         self.ref_occs = np.arange(nocc, dtype=pyci.c_int)
 
         # Initialize base class
-        BaseFanCI.__init__(self, ham, wfn, ndet, nparam, pspace_hf=False, **kwargs)
+        FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
     def compute_overlap(self, x, occs_array):
         r"""
@@ -79,17 +81,20 @@ class AP1roGFanCI(APIGFanCI):
 
         """
         x_mat = x.reshape(self.nocc_up, self.nvir_up)
-        y = np.empty((occs_array.shape[0], x.size), dtype=x.dtype)
-        y_mat_array = y.reshape(occs_array.shape[0], self.nocc_up, self.nvir_up)
-        for y_mat, occs in zip(y_mat_array, occs_array):
+        y = np.empty((occs_array.shape[0], self.nactive - self.mask[-1]), dtype=x.dtype)
+        for y_row, occs in zip(y, occs_array):
             holes = np.setdiff1d(self.ref_occs, occs, assume_unique=True)
             if holes.size:
                 particles = np.setdiff1d(occs, self.ref_occs, assume_unique=True)
                 particles -= self.nocc_up
                 x_mat_slice = x_mat[holes][:, particles]
-                for i in range(self.nocc_up):
-                    for j in range(self.nvir_up):
-                        y_mat[i, j] = self.permanent_deriv(x_mat_slice, i, j)
+                i = 0
+                j = 0
+                for k, l in product(range(self.nocc_up), range(self.nvir_up)):
+                    if self.mask[i]:
+                        y_row[j] = self.permanent_deriv(x_mat_slice, k, l)
+                        j += 1
+                    i += 1
             else:
-                y_mat[:, :] = 0
+                y_row[:] = 0
         return y

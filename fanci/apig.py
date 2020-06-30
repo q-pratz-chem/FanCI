@@ -3,24 +3,26 @@ FanCI APIG module.
 
 """
 
+from itertools import product
+
 import numpy as np
 
 import pyci
 
-from fanci.base import BaseFanCI
+from .fanci import FanCI
 
 
 __all___ = [
-    'APIGFanCI',
+    'APIG',
     ]
 
 
-class APIGFanCI(BaseFanCI):
+class APIG(FanCI):
     r"""
     APIG FanCI class.
 
     """
-    def __init__(self, ham, nocc, ndet=None, wfn=None, **kwargs):
+    def __init__(self, ham, nocc, nproj=None, wfn=None, **kwargs):
         r"""
         Initialize the FanCI problem.
 
@@ -30,7 +32,7 @@ class APIGFanCI(BaseFanCI):
             Hamiltonian.
         nocc : int
             Number of occupied indices.
-        ndet : int, optional
+        nproj : int, optional
             Number of determinants in P space.
         wfn : pyci.doci_wfn, optional
             If specified, this wfn defines the P space.
@@ -39,8 +41,8 @@ class APIGFanCI(BaseFanCI):
         # Compute number of parameters (c_kl + energy)
         nparam = ham.nbasis * nocc + 1
 
-        # Handle default ndet
-        ndet = nparam if ndet is None else ndet
+        # Handle default nproj
+        nproj = nparam if nproj is None else nproj
 
         # Handle default wfn
         if wfn is None:
@@ -49,7 +51,7 @@ class APIGFanCI(BaseFanCI):
             raise ValueError('wfn.nocc_{up,dn} does not match nocc parameter')
 
         # Initialize base class
-        BaseFanCI.__init__(self, ham, wfn, ndet, nparam, pspace_hf=True, **kwargs)
+        FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
     def compute_overlap(self, x, occs_array):
         r"""
@@ -68,12 +70,15 @@ class APIGFanCI(BaseFanCI):
 
         """
         x_mat = x.reshape(self.nbasis, self.nocc_up)
-        y = np.empty((occs_array.shape[0], self.nbasis * self.nocc_up), dtype=x.dtype)
-        y_mat_array = y.reshape(occs_array.shape[0], self.nbasis, self.nocc_up)
-        for y_mat, occs in zip(y_mat_array, occs_array):
-            for i in range(self.nbasis):
-                for j in range(self.nocc_up):
-                    y_mat[i, j] = self.permanent_deriv(x_mat[occs], i, j)
+        y = np.empty((occs_array.shape[0], self.nactive - self.mask[-1]), dtype=x.dtype)
+        for y_row, occs in zip(y, occs_array):
+            i = 0
+            j = 0
+            for k, l in product(range(self.nbasis), range(self.nocc_up)):
+                if self.mask[i]:
+                    y_row[j] = self.permanent_deriv(x_mat[occs], k, l)
+                    j += 1
+                i += 1
         return y
 
     @staticmethod
@@ -81,11 +86,11 @@ class APIGFanCI(BaseFanCI):
         r"""
         Compute the permanent of a square matrix using Glynn's algorithm.
 
-        Gray code generation from Knuth, D. E. (2005). The Art of Computer
-        Programming, Volume 4, Fascicle 2: Generating All Tuples and Permutations.
+        Gray code generation from Knuth, D. E. (2005). The Art of Computer Programming,
+        Volume 4, Fascicle 2: Generating All Tuples and Permutations.
 
-        Glynn's algorithm from Glynn, D. G. (2010). The permanent of a square
-        matrix. European Journal of Combinatorics, 31(7), 1887-1891.
+        Glynn's algorithm from Glynn, D. G. (2010). The permanent of a square matrix.
+        European Journal of Combinatorics, 31(7), 1887-1891.
 
         """
         # initialize gray code
@@ -113,7 +118,7 @@ class APIGFanCI(BaseFanCI):
     @staticmethod
     def permanent_deriv(matrix, i, j):
         r"""
-        Compute the derivative of the permanent of a square matrix with respect to element (i, j).
+        Compute the derivative of the permanent of a square matrix.
 
         """
         # TODO
