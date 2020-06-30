@@ -9,6 +9,8 @@ import numpy as np
 
 import pyci
 
+from scipy.optimize import root, least_squares
+
 
 __all__ = [
     'BaseFanCI',
@@ -139,12 +141,16 @@ class BaseFanCI(abc.ABC):
         # Handle wfn parameter; decide values for generating determinants from its type
         wfn = wfn.copy()
         if isinstance(wfn, pyci.doci_wfn):
-            noccs = (wfn.nocc_up,)
             e_max = min(wfn.nocc_up, wfn.nvir_up)
+            noccs = (wfn.nocc_up,)
             connections = (1,)
-        elif isinstance(wfn, (pyci.fullci_wfn, pyci.genci_wfn)):
-            noccs = wfn.nocc_up, wfn.nocc_dn
+        elif isinstance(wfn, pyci.fullci_wfn):
             e_max = min(wfn.nocc, wfn.nvir)
+            noccs = wfn.nocc_up, wfn.nocc_dn
+            connections = (1, 2)
+        elif isinstance(wfn, pyci.genci_wfn):
+            e_max = min(wfn.nocc, wfn.nvir)
+            noccs = (wfn.nocc_up,)
             connections = (1, 2)
         else:
             raise TypeError('invalid wfn type')
@@ -195,7 +201,7 @@ class BaseFanCI(abc.ABC):
         self._constraints = constraints
         self._mask = mask
 
-    def optimize(self, x0, *args, jac=False, mode='lstsq', **kwargs):
+    def optimize(self, x0, mode='lstsq', use_jac=False, **kwargs):
         r"""
         Optimize the wave function parameters.
 
@@ -203,13 +209,53 @@ class BaseFanCI(abc.ABC):
         ----------
         x0 : np.ndarray
             Initial guess for wave function parameters.
-        jac : bool, optional
-            Whether to use Jacobian.
-        mode : ('lstsq' | ...)
+        mode : ('lstsq' | 'root'), default='lstsq'
             Solver mode.
+        use_jac : bool, default=False
+            Whether to use the Jacobian function or a finite-difference approximation.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to optimizer.
+
+        Returns
+        -------
+        result : scipy.optimize.OptimizeResult
+            Result of optimization.
 
         """
-        pass # TODO
+        # Check x0 vector length
+        if x0.size != self.nparam:
+            raise ValueError('length of x0 does not match nparam')
+
+        # Prepare objective, Jacobian, x0
+        if self.nparam_active < self.nparam:
+            # Generate masked versions with frozen parameters
+            f, j, x0 = self._apply_mask(x0)
+        else:
+            # Use bare functions and copy of x0
+            f = self.compute_objective
+            j = self.compute_jacobian
+            x0 = np.copy(x0)
+
+        # Set up initial arguments to optimizer
+        opt_args = (f,)
+        opt_kwargs = kwargs.copy()
+        if use_jac:
+            opt_kwargs['jac'] = j
+
+        # Parse mode parameter; choose optimizer and fix arguments
+        if mode == 'lstsq':
+            optimizer = least_squares
+        elif mode == 'root':
+            if self.nequation > self.nparam_active:
+                raise ValueError('\'root\' mode does not work with over-determined system')
+            optimizer = root
+        elif mode == 'cma':
+            raise NotImplementedError
+        else:
+            raise ValueError('invalid mode parameter')
+
+        # Run optimizer
+        return optimizer(*opt_args, **opt_kwargs)
 
     @abc.abstractmethod
     def compute_overlap(self, x, occs_array):
@@ -219,7 +265,7 @@ class BaseFanCI(abc.ABC):
             f : x[k], occs_array[m, :] -> y[m]
 
         """
-        raise NotImplementedError("this method must be overwritten in a sub-class")
+        raise NotImplementedError('this method must be overwritten in a sub-class')
 
     @abc.abstractmethod
     def compute_overlap_deriv(self, x, occs_array):
@@ -229,7 +275,7 @@ class BaseFanCI(abc.ABC):
             j : x[k], occs_array[m, :] -> y[m, k]
 
         """
-        raise NotImplementedError("this method must be overwritten in a sub-class")
+        raise NotImplementedError('this method must be overwritten in a sub-class')
 
     def compute_objective(self, x):
         r"""
@@ -402,3 +448,38 @@ class BaseFanCI(abc.ABC):
             return y
 
         return f, j
+
+    def _apply_mask(self, x0):
+        r"""
+        Generate masked objective, jacobian, and x0 for optimization with frozen parameters.
+
+        Parameters
+        ----------
+        x0 : np.ndarray
+            Initial guess for all parameters.
+
+        Returns
+        -------
+        f : function
+            Masked objective function.
+        j : function
+            Masked Jacobian function.
+        x : np.ndarray
+            Masked initial guess array.
+
+        """
+        y0 = np.copy(x0)
+
+        def f(x):
+            r"Masked objective function."
+            y = np.copy(y0)
+            y[self.mask] = x
+            return self.compute_objective(y)
+
+        def j(x):
+            r"Masked Jacobian function."
+            y = np.copy(y0)
+            y[self.mask] = x
+            return self.compute_jacobian(y)[:, self.mask]
+
+        return f, j, np.copy(x0[self.mask])
