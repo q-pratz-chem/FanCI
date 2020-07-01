@@ -126,32 +126,34 @@ class AP1roG(FanCI):
         for y_row, occs in zip(y, occs_array):
             # Find hole indices
             holes = np.setdiff1d(self._ref_occs, occs, assume_unique=True)
+            # Check for reference determinant; d(<\psi|\Psi>)/dp == 0
             if not holes.size:
-                # Reference determinant; d(<\psi|\Psi>)/dp == 0
                 continue
             # Find particle indices
             particles = np.setdiff1d(occs, self._ref_occs, assume_unique=True)
             particles -= self._wfn.nocc_up
-            # Iterate over parameter, masked parameter indices (i, j)
+            # Iterate over all parameters (i), active parameters (j)
             i = 0
             j = 0
             for k in range(self._wfn.nocc_up):
-                # Check if row is present
                 k_pos = holes.searchsorted(k)
-                k_present = k_pos != holes.size and holes[k_pos] == k
-                k_slice = np.delete(holes, k_pos, axis=0) if k_present else holes
                 for l in range(self._wfn.nvir_up):
                     # Check if element is active
                     if self._mask[i]:
-                        # Check if any rows are left
-                        if k_present and k_slice.size:
-                            # Check if column is present
-                            l_pos = particles.searchsorted(l)
-                            if l_pos != particles.size and particles[l_pos] == l:
-                                # Compute permanent of (k, l) minor
-                                l_slice = np.delete(particles, l_pos, axis=0)
-                                y_row[j] = permanent(x_mat[k_slice][:, l_slice])
+                        # Check if row is present
+                        if k_pos != holes.size and holes[k_pos] == k:
+                            k_slice = np.delete(holes, k_pos, axis=0)
+                            # Check if any rows remain after deleting k_pos
+                            if k_slice.size:
+                                # Check if column is present
+                                l_pos = particles.searchsorted(l)
+                                if l_pos != particles.size and particles[l_pos] == l:
+                                    # Compute permanent of (k, l) minor
+                                    l_slice = np.delete(particles, l_pos, axis=0)
+                                    y_row[j] = permanent(x_mat[k_slice][:, l_slice])
+                        # Go to next active parameter
                         j += 1
+                    # Go to next parameter
                     i += 1
 
         # Return overlap derivative matrix

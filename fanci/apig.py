@@ -109,25 +109,27 @@ class APIG(FanCI):
 
         # Iterate over occupation vectors
         for y_row, occs in zip(y, occs_array):
-            # Iterate over parameter, masked parameter indices (i, j)
+            # Iterate over all parameters (i), active parameters (j)
             i = 0
             j = 0
             for k in range(self._wfn.nbasis):
-                # Check if row is present
-                k_pos = occs.searchsorted(k)
-                k_present = k_pos != occs.size and occs[k_pos] == k
-                k_slice = np.delete(occs, k_pos, axis=0) if k_present else occs
                 for l in range(self._wfn.nocc_up):
                     # Check if element is active
                     if self._mask[i]:
-                        # Check if any rows are left
-                        if k_present and k_slice.size:
-                            # Check is column is present
-                            l_pos = occs.searchsorted(l)
-                            if l_pos != occs.size and occs[l_pos] == l:
-                                # Compute permanent of (k, l) minor
-                                y_row[j] = permanent(np.delete(x_mat[k_slice], l, axis=1))
+                        k_pos = occs.searchsorted(k)
+                        # Check if row is present
+                        if k_pos != occs.size and occs[k_pos] == k:
+                            k_slice = np.delete(occs, k_pos, axis=0)
+                            # Check if any rows remain after deleting k_pos
+                            if k_slice.size:
+                                # Check if column is present
+                                l_pos = occs.searchsorted(l)
+                                if l_pos != occs.size and occs[l_pos] == l:
+                                    # Compute permanent of (k, l) minor
+                                    y_row[j] = permanent(np.delete(x_mat[k_slice], l, axis=1))
+                        # Go to next active parameter
                         j += 1
+                    # Go to next parameter
                     i += 1
 
         # Return overlap derivative matrix
