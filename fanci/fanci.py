@@ -446,7 +446,7 @@ class FanCI(metaclass=ABCMeta):
         Parameters
         ----------
         x : np.ndarray
-            Parameter array, [c_0, c_1, ..., c_n, E].
+            Parameter array, [p_0, p_1, ..., p_n, E].
 
         Returns
         -------
@@ -455,7 +455,7 @@ class FanCI(metaclass=ABCMeta):
 
         """
         # Allocate objective vector
-        f = np.empty(self._nequation, dtype=x.dtype)
+        f = np.empty(self._nequation, dtype=pyci.c_double)
         f_proj = f[:self._nproj]
         f_cons = f[self._nproj:]
 
@@ -496,7 +496,7 @@ class FanCI(metaclass=ABCMeta):
         Parameters
         ----------
         x : np.ndarray
-            Parameter array, [c_0, c_1, ..., c_n, E].
+            Parameter array, [p_0, p_1, ..., p_n, E].
 
         Returns
         -------
@@ -505,7 +505,7 @@ class FanCI(metaclass=ABCMeta):
 
         """
         # Allocate Jacobian matrix (in transpose memory order)
-        jac = np.empty((self._nequation, self._nactive), order='F', dtype=x.dtype)
+        jac = np.empty((self._nequation, self._nactive), order='F', dtype=pyci.c_double)
         jac_proj = jac[:self._nproj]
         jac_cons = jac[self._nproj:]
 
@@ -590,7 +590,7 @@ class FanCI(metaclass=ABCMeta):
             Constraint gradient \delta_{ki}.
 
             """
-            y = np.zeros(self.nactive, dtype=x.dtype)
+            y = np.zeros(self.nactive, dtype=pyci.c_double)
             if self._mask[i]:
                 y[self._mask[:i].sum()] = 1
             return y
@@ -668,7 +668,17 @@ class FanCI(metaclass=ABCMeta):
         r"""
         Compute the FanCI overlap vector.
 
-            f : x[k], occs_array[m, :] -> y[m]
+        Parameters
+        ----------
+        x : np.ndarray
+            Parameter array, [p_0, p_1, ..., p_n].
+        occ_array : np.ndarray
+            Array of determinant occupations for which to compute overlap.
+
+        Returns
+        -------
+        ovlp : np.ndarray
+            Overlap array.
 
         """
         raise NotImplementedError('this method must be overwritten in a sub-class')
@@ -678,7 +688,17 @@ class FanCI(metaclass=ABCMeta):
         r"""
         Compute the FanCI overlap derivative matrix.
 
-            j : x[k], occs_array[m, :] -> y[m, k]
+        Parameters
+        ----------
+        x : np.ndarray
+            Parameter array, [p_0, p_1, ..., p_n].
+        occ_array : np.ndarray
+            Array of determinant occupations for which to compute overlap derivative.
+
+        Returns
+        -------
+        ovlp : np.ndarray
+            Overlap derivative array.
 
         """
         raise NotImplementedError('this method must be overwritten in a sub-class')

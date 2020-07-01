@@ -3,7 +3,7 @@ FanCI APIG module.
 
 """
 
-from itertools import product
+from typing import Any
 
 import numpy as np
 
@@ -22,20 +22,23 @@ class APIG(FanCI):
     APIG FanCI class.
 
     """
-    def __init__(self, ham, nocc, nproj=None, wfn=None, **kwargs):
+    def __init__(self, ham: pyci.hamiltonian, nocc: int, nproj: int = None,
+            wfn: pyci.doci_wfn = None, **kwargs: Any) -> None:
         r"""
         Initialize the FanCI problem.
 
         Parameters
         ----------
         ham : pyci.hamiltonian
-            Hamiltonian.
+            PyCI Hamiltonian.
         nocc : int
-            Number of occupied indices.
+            Number of occupied orbitals.
         nproj : int, optional
-            Number of determinants in P space.
+            Number of determinants in projection ("P") space.
         wfn : pyci.doci_wfn, optional
-            If specified, this wfn defines the P space.
+            If specified, this PyCI wave function defines the projection ("P") space.
+        kwargs : Any, optional
+            Additional keyword arguments for base FanCI class.
 
         """
         # Compute number of parameters (c_kl + energy)
@@ -47,79 +50,131 @@ class APIG(FanCI):
         # Handle default wfn
         if wfn is None:
             wfn = pyci.doci_wfn(ham.nbasis, nocc)
+        elif not isinstance(wfn, pyci.doci_wfn):
+            raise TypeError('wfn must be a `pyci.doci_wfn`')
         elif wfn.nocc_up != nocc or wfn.nocc_dn != nocc:
             raise ValueError('wfn.nocc_{up,dn} does not match nocc parameter')
 
         # Initialize base class
         FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
-    def compute_overlap(self, x, occs_array):
+    def compute_overlap(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
         r"""
-        Compute the overlap vector.
+        Compute the FanCI overlap vector.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Parameter array, [p_0, p_1, ..., p_n].
+        occ_array : np.ndarray
+            Array of determinant occupations for which to compute overlap.
+
+        Returns
+        -------
+        ovlp : np.ndarray
+            Overlap array.
 
         """
-        x_mat = x.reshape(self.nbasis, self.nocc_up)
-        y = np.empty(occs_array.shape[0], dtype=x.dtype)
+        # Reshape parameter array to APIG matrix
+        x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)
+
+        # Compute overlaps of occupation vectors
+        y = np.empty(occs_array.shape[0], dtype=pyci.c_double)
         for i, occs in enumerate(occs_array):
-            y[i] = self.permanent(x_mat[occs])
+            y[i] = permanent(x_mat[occs])
         return y
 
-    def compute_overlap_deriv(self, x, occs_array):
+    def compute_overlap_deriv(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
         r"""
-        Compute the overlap derivative matrix.
+        Compute the FanCI overlap derivative matrix.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Parameter array, [p_0, p_1, ..., p_n].
+        occ_array : np.ndarray
+            Array of determinant occupations for which to compute overlap derivative.
+
+        Returns
+        -------
+        ovlp : np.ndarray
+            Overlap derivative array.
 
         """
-        x_mat = x.reshape(self.nbasis, self.nocc_up)
-        y = np.empty((occs_array.shape[0], self.nactive - self.mask[-1]), dtype=x.dtype)
+        # Reshape parameter array to APIG matrix
+        x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)
+
+        # Shape of y is (no. determinants, no. active parameters excluding energy)
+        y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
+
+        # Iterate over occupation vectors
         for y_row, occs in zip(y, occs_array):
+            # Iterate over parameter, masked parameter indices (i, j)
             i = 0
             j = 0
-            for k, l in product(range(self.nbasis), range(self.nocc_up)):
-                if self.mask[i]:
-                    y_row[j] = self.permanent_deriv(x_mat[occs], k, l)
-                    j += 1
-                i += 1
+            for k in range(self._wfn.nbasis):
+                # Check if row is present
+                k_pos = occs.searchsorted(k)
+                k_present = k_pos != occs.size and occs[k_pos] == k
+                k_slice = np.delete(occs, k_pos, axis=0) if k_present else occs
+                for l in range(self._wfn.nocc_up):
+                    # Check if element is active
+                    if self._mask[i]:
+                        # Check if any rows are left
+                        if k_present and k_slice.size:
+                            # Check is column is present
+                            l_pos = occs.searchsorted(l)
+                            if l_pos != occs.size and occs[l_pos] == l:
+                                # Compute permanent of (k, l) minor
+                                y_row[j] = permanent(np.delete(x_mat[k_slice], l, axis=1))
+                        j += 1
+                    i += 1
+
+        # Return overlap derivative matrix
         return y
 
-    @staticmethod
-    def permanent(matrix):
-        r"""
-        Compute the permanent of a square matrix using Glynn's algorithm.
 
-        Gray code generation from Knuth, D. E. (2005). The Art of Computer Programming,
-        Volume 4, Fascicle 2: Generating All Tuples and Permutations.
+def permanent(matrix : np.ndarray) -> float:
+    r"""
+    Compute the permanent of a square matrix using Glynn's algorithm.
 
-        Glynn's algorithm from Glynn, D. G. (2010). The permanent of a square matrix.
-        European Journal of Combinatorics, 31(7), 1887-1891.
+    Gray code generation from Knuth, D. E. (2005). The Art of Computer Programming,
+    Volume 4, Fascicle 2: Generating All Tuples and Permutations.
 
-        """
-        # initialize gray code
-        n = matrix.shape[0]
-        pos = 0
-        sign = 1
-        bound = n - 1
-        delta = np.ones(n, dtype=int)
-        graycode = np.arange(n, dtype=int)
-        # iterate over every delta
-        perm = np.prod(np.sum(matrix, axis=0))
-        while pos < bound:
-            # update delta and add term to permanent
-            sign *= -1
-            delta[bound - pos] *= -1
-            perm += sign * np.prod(delta.dot(matrix))
-            # update gray code and position
-            graycode[0] = 0
-            graycode[pos] = graycode[pos + 1]
-            graycode[pos + 1] = pos + 1
-            pos = graycode[0]
-        # divide by constant external term and return
-        return perm / (2 ** bound)
+    Glynn's algorithm from Glynn, D. G. (2010). The permanent of a square matrix.
+    European Journal of Combinatorics, 31(7), 1887-1891.
 
-    @staticmethod
-    def permanent_deriv(matrix, i, j):
-        r"""
-        Compute the derivative of the permanent of a square matrix.
+    Parameters
+    ----------
+    matrix : np.ndarray
+        Square matrix.
 
-        """
-        # TODO
-        raise NotImplementedError
+    Returns
+    -------
+    result : matrix.dtype
+        Permanent of the matrix.
+
+    """
+    # Initialize gray code
+    n = matrix.shape[0]
+    pos = 0
+    sign = 1
+    bound = n - 1
+    delta = np.ones(n, dtype=np.int)
+    graycode = np.arange(n, dtype=np.intp)
+
+    # Iterate over every delta
+    result = np.prod(np.sum(matrix, axis=0))
+    while pos < bound:
+        # Update delta and add term to permanent
+        sign *= -1
+        delta[bound - pos] *= -1
+        result += sign * np.prod(delta.dot(matrix))
+        # Update gray code and position
+        graycode[0] = 0
+        graycode[pos] = graycode[pos + 1]
+        graycode[pos + 1] = pos + 1
+        pos = graycode[0]
+
+    # Divide by constant factor
+    return result / (2 ** bound)
