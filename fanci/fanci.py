@@ -248,18 +248,12 @@ class FanCI(metaclass=ABCMeta):
         wfn = wfn.copy()
         if isinstance(wfn, pyci.doci_wfn):
             e_max = min(wfn.nocc_up, wfn.nvir_up)
-            noccs = (wfn.nocc_up,)
             connections = (1,)
-        elif isinstance(wfn, pyci.fullci_wfn):
+        elif isinstance(wfn, (pyci.fullci_wfn, pyci.genci_wfn)):
             e_max = min(wfn.nocc, wfn.nvir)
-            noccs = wfn.nocc_up, wfn.nocc_dn
-            connections = (1, 2)
-        elif isinstance(wfn, pyci.genci_wfn):
-            e_max = min(wfn.nocc, wfn.nvir)
-            noccs = (wfn.nocc_up,)
             connections = (1, 2)
         else:
-            raise TypeError('`wfn` must be a `pyci.{doci,fullci,genci_wfn}`')
+            raise TypeError('`wfn` must be a `pyci.{doci,fullci,genci}_wfn`')
 
         # Fill wfn with P space determinants in excitation order until len(wfn) >= nproj;
         # only add Hartree-Fock det. (zero order excitation) if wfn is empty
@@ -270,15 +264,12 @@ class FanCI(metaclass=ABCMeta):
         if len(wfn) < nproj:
             raise ValueError('unable to generate `nproj` determinants')
 
-        # Compute P space determinants
-        pspace_dets = wfn.to_det_array(nproj)
-
         # Truncate wave function if we generated > nproj determinants
         if len(wfn) > nproj:
-            wfn = wfn.from_det_array(wfn.nbasis, *noccs, pspace_dets)
+            wfn = wfn.truncated(nproj)
 
         # Fill wfn with S space determinants
-        for det in pspace_dets:
+        for det in wfn.to_det_array(nproj):
             wfn.add_excited_dets(*connections, det=det)
 
         # Compute arrays of occupations (flattened; spin-up, then spin-down if applicable)
