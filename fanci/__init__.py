@@ -14,3 +14,4 @@ __all__ = [
 from .fanci import FanCI
 from .apig import APIG
 from .ap1rog import AP1roG
+from .detratio import DetRatio

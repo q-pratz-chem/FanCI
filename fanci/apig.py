@@ -41,6 +41,9 @@ class APIG(FanCI):
             Additional keyword arguments for base FanCI class.
 
         """
+        # Parse arguments
+        # ---------------
+
         # Compute number of parameters (c_kl + energy)
         nparam = ham.nbasis * nocc + 1
 
@@ -56,9 +59,27 @@ class APIG(FanCI):
             raise ValueError('wfn.nocc_{up,dn} does not match nocc parameter')
 
         # Initialize base class
+        # ---------------------
+
         FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
-    def compute_overlap(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
+        # Pre-compute data needed to compute the overlap (and its derivative) of the
+        # "P" space and "S" space determinants
+        # --------------------------------------------------------------------------
+
+        # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in "S" space
+        arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
+        sspace_data = [occs.searchsorted(arange) for occs in self._sspace]
+        pspace_data = sspace_data[:self._nproj]
+
+        # Save sub-class -specific attributes
+        # -----------------------------------
+
+        self._sspace_data = sspace_data
+        self._pspace_data = pspace_data
+
+    def compute_overlap(self, x: np.ndarray, occ_array: np.ndarray, mode: str = None) \
+            -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -68,6 +89,9 @@ class APIG(FanCI):
             Parameter array, [p_0, p_1, ..., p_n].
         occ_array : np.ndarray
             Array of determinant occupations for which to compute overlap.
+        mode : ('P' | 'S'), optional
+            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+            or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
         -------
@@ -84,7 +108,8 @@ class APIG(FanCI):
             y[i] = permanent(x_mat[occs])
         return y
 
-    def compute_overlap_deriv(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
+    def compute_overlap_deriv(self, x: np.ndarray, occ_array: np.ndarray, mode: str = None) \
+            -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -94,6 +119,9 @@ class APIG(FanCI):
             Parameter array, [p_0, p_1, ..., p_n].
         occ_array : np.ndarray
             Array of determinant occupations for which to compute overlap derivative.
+        mode : ('P' | 'S'), optional
+            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+            or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
         -------
@@ -101,6 +129,16 @@ class APIG(FanCI):
             Overlap derivative array.
 
         """
+        # Check if we can use our precomputed {p,s}space_data
+        if mode == 'P':
+            pos_list = self._pspace_data
+        elif mode == 'S':
+            pos_list = self._sspace_data
+        else:
+            # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
+            arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
+            pos_list = [occs.searchsorted(arange) for occs in occs_array]
+
         # Reshape parameter array to APIG matrix
         x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)
 
@@ -108,29 +146,35 @@ class APIG(FanCI):
         y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
 
         # Iterate over occupation vectors
-        for y_row, occs in zip(y, occs_array):
+        for y_row, occs, positions in zip(y, occs_array, pos_list):
+
+            # Get results of 'searchsorted' of each {k,l} in occs
+            k_positions = positions
+            l_positions = positions[:self._wfn.nocc_up]
+
             # Iterate over all parameters (i), active parameters (j)
-            i = 0
-            j = 0
-            for k in range(self._wfn.nbasis):
-                for l in range(self._wfn.nocc_up):
-                    # Check if element is active
-                    if self._mask[i]:
-                        k_pos = occs.searchsorted(k)
-                        # Check if row is present
-                        if k_pos != occs.size and occs[k_pos] == k:
-                            k_slice = np.delete(occs, k_pos, axis=0)
-                            # Check if any rows remain after deleting k_pos
-                            if k_slice.size:
-                                # Check if column is present
-                                l_pos = occs.searchsorted(l)
-                                if l_pos != occs.size and occs[l_pos] == l:
-                                    # Compute permanent of (k, l) minor
-                                    y_row[j] = permanent(np.delete(x_mat[k_slice], l, axis=1))
-                        # Go to next active parameter
-                        j += 1
-                    # Go to next parameter
+            i = -1
+            j = -1
+
+            # Iterate over row indices
+            for k, k_pos in enumerate(k_positions):
+                # Check if row is present
+                if k_pos != occs.size and occs[k_pos] == k:
+                    k_slice = np.delete(occs, k_pos, axis=0)
+                else:
+                    k_slice = np.empty(0)
+                # Iterate over column indices
+                for l, l_pos in enumerate(l_positions):
+                    # Check if element is active, advance (i, j)
                     i += 1
+                    if not self._mask[i]:
+                        continue
+                    j += 1
+                    # Check if any rows remain after deleting k_pos
+                    # Check if column is present
+                    if k_slice.size and l_pos != occs.size and occs[l_pos] == l:
+                        # Compute permanent of (k, l) minor
+                        y_row[j] = permanent(np.delete(x_mat[k_slice], l, axis=1))
 
         # Return overlap derivative matrix
         return y

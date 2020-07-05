@@ -224,12 +224,12 @@ class FanCI(metaclass=ABCMeta):
             mask = np.ones(nparam, dtype=np.bool)
         else:
             mask = np.array(mask)
-            # Boolean mask
             if mask.dtype == np.bool:
+                # Check length of boolean mask
                 if mask.size != nparam:
                     raise ValueError('boolean mask must have length `nparam`')
-            # Convert integer mask to boolean
             else:
+                # Convert integer mask to boolean
                 ints = mask
                 mask = np.ones(nparam, dtype=np.bool)
                 mask[ints] = 0
@@ -294,10 +294,10 @@ class FanCI(metaclass=ABCMeta):
         self._pspace = pspace
         self._sspace = sspace
 
-        # Set arrays to read-only
-        self._pspace.setflags(write=0)
-        self._sspace.setflags(write=0)
-        self._mask_view.setflags(write=0)
+        # Set read-only flag on public array attributes
+        self._pspace.setflags(write=False)
+        self._sspace.setflags(write=False)
+        self._mask_view.setflags(write=False)
 
     def optimize(self, x0: np.ndarray, mode: str = 'lstsq', use_jac: bool = False, **kwargs: Any) \
             -> OptimizeResult:
@@ -457,7 +457,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   c_m
         #
-        ovlp = self.compute_overlap(x[:-1], self._sspace)
+        ovlp = self.compute_overlap(x[:-1], self._sspace, mode='S')
 
         # Compute objective function:
         #
@@ -511,7 +511,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   d(c_m)/d(p_k)
         #
-        d_ovlp = self.compute_overlap_deriv(x[:-1], self._sspace)
+        d_ovlp = self.compute_overlap_deriv(x[:-1], self._sspace, mode='S')
 
         # Check is energy parameter is active:
         if self._mask[-1]:
@@ -520,7 +520,7 @@ class FanCI(metaclass=ABCMeta):
             #
             #   dE/d(p_k) <n|\Psi> = dE/d(p_k) \delta_{nk} c_n
             #
-            ovlp = self.compute_overlap(x[:-1], self._pspace)
+            ovlp = self.compute_overlap(x[:-1], self._pspace, mode='P')
             ovlp *= -1
             jac_proj[:, -1] = ovlp
             #
@@ -655,7 +655,8 @@ class FanCI(metaclass=ABCMeta):
         return masked_f
 
     @abstractmethod
-    def compute_overlap(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
+            -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -663,19 +664,23 @@ class FanCI(metaclass=ABCMeta):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occ_array : np.ndarray
+        occs_array : np.ndarray
             Array of determinant occupations for which to compute overlap.
+        mode : ('P' | 'S'), optional
+            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+            or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
         -------
         ovlp : np.ndarray
-            Overlap array.
+            Overlap vector.
 
         """
         raise NotImplementedError('this method must be overwritten in a sub-class')
 
     @abstractmethod
-    def compute_overlap_deriv(self, x: np.ndarray, occ_array: np.ndarray) -> np.ndarray:
+    def compute_overlap_deriv(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
+            -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -683,13 +688,16 @@ class FanCI(metaclass=ABCMeta):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occ_array : np.ndarray
+        occs_array : np.ndarray
             Array of determinant occupations for which to compute overlap derivative.
+        mode : ('P' | 'S'), optional
+            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+            or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
         -------
         ovlp : np.ndarray
-            Overlap derivative array.
+            Overlap derivative matrix.
 
         """
         raise NotImplementedError('this method must be overwritten in a sub-class')
