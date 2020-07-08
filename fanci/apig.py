@@ -13,8 +13,8 @@ from .fanci import FanCI
 
 
 __all___ = [
-    'APIG',
-    ]
+    "APIG",
+]
 
 
 class APIG(FanCI):
@@ -22,8 +22,15 @@ class APIG(FanCI):
     APIG FanCI class.
 
     """
-    def __init__(self, ham: pyci.hamiltonian, nocc: int, nproj: int = None,
-            wfn: pyci.doci_wfn = None, **kwargs: Any) -> None:
+
+    def __init__(
+        self,
+        ham: pyci.hamiltonian,
+        nocc: int,
+        nproj: int = None,
+        wfn: pyci.doci_wfn = None,
+        **kwargs: Any
+    ) -> None:
         r"""
         Initialize the FanCI problem.
 
@@ -44,6 +51,8 @@ class APIG(FanCI):
         # Parse arguments
         # ---------------
 
+        if not isinstance(ham, pyci.hamiltonian):
+            raise TypeError("wfn must be a `pyci.hamiltonian`")
         # Compute number of parameters (c_kl + energy)
         nparam = ham.nbasis * nocc + 1
 
@@ -54,9 +63,9 @@ class APIG(FanCI):
         if wfn is None:
             wfn = pyci.doci_wfn(ham.nbasis, nocc)
         elif not isinstance(wfn, pyci.doci_wfn):
-            raise TypeError('wfn must be a `pyci.doci_wfn`')
+            raise TypeError("wfn must be a `pyci.doci_wfn`")
         elif wfn.nocc_up != nocc or wfn.nocc_dn != nocc:
-            raise ValueError('wfn.nocc_{up,dn} does not match nocc parameter')
+            raise ValueError("wfn.nocc_{up,dn} does not match nocc parameter")
 
         # Initialize base class
         # ---------------------
@@ -70,7 +79,7 @@ class APIG(FanCI):
         # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in "S" space
         arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
         sspace_data = [occs.searchsorted(arange) for occs in self._sspace]
-        pspace_data = sspace_data[:self._nproj]
+        pspace_data = sspace_data[: self._nproj]
 
         # Save sub-class -specific attributes
         # -----------------------------------
@@ -78,8 +87,9 @@ class APIG(FanCI):
         self._sspace_data = sspace_data
         self._pspace_data = pspace_data
 
-    def compute_overlap(self, x: np.ndarray, occ_array: np.ndarray, mode: str = None) \
-            -> np.ndarray:
+    def compute_overlap(
+        self, x: np.ndarray, occs_array: np.ndarray, mode: str = None
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -87,7 +97,7 @@ class APIG(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occ_array : np.ndarray
+        occs_array : np.ndarray
             Array of determinant occupations for which to compute overlap.
         mode : ('P' | 'S'), optional
             Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
@@ -108,8 +118,9 @@ class APIG(FanCI):
             y[i] = permanent(x_mat[occs])
         return y
 
-    def compute_overlap_deriv(self, x: np.ndarray, occ_array: np.ndarray, mode: str = None) \
-            -> np.ndarray:
+    def compute_overlap_deriv(
+        self, x: np.ndarray, occ_array: np.ndarray, mode: str = None
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -130,9 +141,9 @@ class APIG(FanCI):
 
         """
         # Check if we can use our precomputed {p,s}space_data
-        if mode == 'P':
+        if mode == "P":
             pos_list = self._pspace_data
-        elif mode == 'S':
+        elif mode == "S":
             pos_list = self._sspace_data
         else:
             # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
@@ -143,14 +154,16 @@ class APIG(FanCI):
         x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)
 
         # Shape of y is (no. determinants, no. active parameters excluding energy)
-        y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
+        y = np.zeros(
+            (occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double
+        )
 
         # Iterate over occupation vectors
         for y_row, occs, positions in zip(y, occs_array, pos_list):
 
             # Get results of 'searchsorted' of each {k,l} in occs
             k_positions = positions
-            l_positions = positions[:self._wfn.nocc_up]
+            l_positions = positions[: self._wfn.nocc_up]
 
             # Iterate over all parameters (i), active parameters (j)
             i = -1
@@ -180,7 +193,7 @@ class APIG(FanCI):
         return y
 
 
-def permanent(matrix : np.ndarray) -> float:
+def permanent(matrix: np.ndarray) -> float:
     r"""
     Compute the permanent of a square matrix using Glynn's algorithm.
 
