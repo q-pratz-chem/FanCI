@@ -45,7 +45,6 @@ def test_apig_init_errors(expecting, args, kwargs):
         APIG(*args, **kwargs)
 
 
-# @pytest.mark.xfail
 def test_apig_init_defaults():
     """
     """
@@ -112,7 +111,19 @@ def test_apig_compute_overlap():
 
 
 def test_apig_compute_overlap_deriv():
-    pass
+    nocc = 2
+    nbasis = 6
+    one_mo = np.arange(6 * 6, dtype=float).reshape(nbasis, nbasis)
+    two_mo = np.arange(36 * 36, dtype=float).reshape((nbasis,) * 4)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    nproj = nocc * nbasis + 1
+    params = np.arange(nbasis * nocc + 1, dtype=pyci.c_double) + 1
+    apig = APIG(ham, nocc, nproj=None)
+
+    f = lambda x: apig.compute_overlap(x, apig.sspace)
+    j = lambda x: apig.compute_overlap_deriv(x, apig.sspace)
+    origin = np.zeros_like(params[:-1])
+    assert_deriv(f, j, origin)
 
 
 def test_apig_permanent():
@@ -141,7 +152,18 @@ def test_apig_compute_objective():
 
 
 def test_apig_compute_jacobian():
-    pass
+    nocc = 2
+    nbasis = 6
+    one_mo = np.arange(6 * 6, dtype=float).reshape(nbasis, nbasis)
+    two_mo = np.arange(36 * 36, dtype=float).reshape((nbasis,) * 4)
+    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    params = np.arange(nbasis * nocc + 1, dtype=pyci.c_double) + 1
+    apig = APIG(ham, nocc)
+
+    f = apig.compute_objective
+    j = apig.compute_jacobian
+    origin = np.zeros_like(params)
+    assert_deriv(f, j, origin)
 
 
 def test_apig_h2_sto6g_ground():

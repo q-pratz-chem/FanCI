@@ -13,8 +13,8 @@ from .fanci import FanCI
 
 
 __all___ = [
-    "APIG",
-]
+        'APIG',
+        ]
 
 
 class APIG(FanCI):
@@ -23,14 +23,8 @@ class APIG(FanCI):
 
     """
 
-    def __init__(
-        self,
-        ham: pyci.hamiltonian,
-        nocc: int,
-        nproj: int = None,
-        wfn: pyci.doci_wfn = None,
-        **kwargs: Any
-    ) -> None:
+    def __init__(self, ham: pyci.hamiltonian, nocc: int, nproj: int = None,
+        wfn: pyci.doci_wfn = None, **kwargs: Any) -> None:
         r"""
         Initialize the FanCI problem.
 
@@ -119,7 +113,7 @@ class APIG(FanCI):
         return y
 
     def compute_overlap_deriv(
-        self, x: np.ndarray, occ_array: np.ndarray, mode: str = None
+        self, x: np.ndarray, occs_array: np.ndarray, mode: str = None
     ) -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
@@ -128,7 +122,7 @@ class APIG(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occ_array : np.ndarray
+        occs_array : np.ndarray
             Array of determinant occupations for which to compute overlap derivative.
         mode : ('P' | 'S'), optional
             Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
