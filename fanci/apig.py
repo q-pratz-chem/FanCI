@@ -214,13 +214,17 @@ def permanent(matrix: np.ndarray) -> float:
         Permanent of the matrix.
 
     """
-    # Initialize gray code
+    # Permanent of zero-by-zero matrix is 1
     n = matrix.shape[0]
+    if not n:
+        return 1
+
+    # Initialize gray code
     pos = 0
     sign = 1
     bound = n - 1
     delta = np.ones(n, dtype=np.int)
-    graycode = np.arange(n, dtype=np.intp)
+    graycode = np.arange(n, dtype=np.int)
 
     # Iterate over every delta
     result = np.prod(np.sum(matrix, axis=0))
