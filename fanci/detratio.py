@@ -6,7 +6,7 @@ https://github.com/QuantumElephant/fanpy/blob/master/wfns/wfn/quasiparticle/det_
 
 """
 
-from typing import Any, Sequence
+from typing import Any, Sequence, Union
 
 import numpy as np
 
@@ -125,8 +125,7 @@ class DetRatio(FanCI):
         # Update nactive
         self._nactive = self._mask.sum()
 
-    def compute_overlap(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
-            -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -134,10 +133,9 @@ class DetRatio(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
@@ -146,6 +144,15 @@ class DetRatio(FanCI):
             Overlap array.
 
         """
+        if isinstance(occs_array, np.ndarray):
+            pass
+        elif occs_array == 'P':
+            occs_array = self._pspace
+        elif occs_array == 'S':
+            occs_array = self._sspace
+        else:
+            raise ValueError('invalid `occs_array` argument')
+
         # Reshape parameter array to numerator and denominator matrices
         x_mats = x.reshape(self._nmatrices, self._wfn.nbasis, self._wfn.nocc_up)
         n_mats = x_mats[:self._numerator]
@@ -158,7 +165,7 @@ class DetRatio(FanCI):
                  / np.prod(np.linalg.det(d_mat[occs]) for d_mat in d_mats)
         return y
 
-    def compute_overlap_deriv(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
+    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
             -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
@@ -167,10 +174,9 @@ class DetRatio(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap derivative.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
@@ -179,15 +185,19 @@ class DetRatio(FanCI):
             Overlap derivative array.
 
         """
-        # Check if we can use our precomputed {p,s}space_data
-        if mode == 'P':
-            pos_list = self._pspace_data
-        elif mode == 'S':
-            pos_list = self._sspace_data
-        else:
+        # Check if we can use our pre-computed {p,s}space_data
+        if isinstance(occs_array, np.ndarray):
             # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
             arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
             pos_list = [occs.searchsorted(arange) for occs in occs_array]
+        elif occs_array == 'P':
+            occs_array = self._pspace
+            pos_list = self._pspace_data
+        elif occs_array == 'S':
+            occs_array = self._sspace
+            pos_list = self._sspace_data
+        else:
+            raise ValueError('invalid `occs_array` argument')
 
         # Reshape parameter array to numerator and denominator matrices
         x_mats = x.reshape(self._nmatrices, self._wfn.nbasis, self._wfn.nocc_up)

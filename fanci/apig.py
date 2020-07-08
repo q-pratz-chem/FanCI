@@ -3,7 +3,7 @@ FanCI APIG module.
 
 """
 
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 
@@ -81,9 +81,7 @@ class APIG(FanCI):
         self._sspace_data = sspace_data
         self._pspace_data = pspace_data
 
-    def compute_overlap(
-        self, x: np.ndarray, occs_array: np.ndarray, mode: str = None
-    ) -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -91,10 +89,9 @@ class APIG(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
@@ -103,6 +100,15 @@ class APIG(FanCI):
             Overlap array.
 
         """
+        if isinstance(occs_array, np.ndarray):
+            pass
+        elif occs_array == 'P':
+            occs_array = self._pspace
+        elif occs_array == 'S':
+            occs_array = self._sspace
+        else:
+            raise ValueError('invalid `occs_array` argument')
+
         # Reshape parameter array to APIG matrix
         x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)
 
@@ -112,9 +118,8 @@ class APIG(FanCI):
             y[i] = permanent(x_mat[occs])
         return y
 
-    def compute_overlap_deriv(
-        self, x: np.ndarray, occs_array: np.ndarray, mode: str = None
-    ) -> np.ndarray:
+    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
+            -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -122,10 +127,9 @@ class APIG(FanCI):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap derivative.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
@@ -134,15 +138,19 @@ class APIG(FanCI):
             Overlap derivative array.
 
         """
-        # Check if we can use our precomputed {p,s}space_data
-        if mode == "P":
-            pos_list = self._pspace_data
-        elif mode == "S":
-            pos_list = self._sspace_data
-        else:
+        # Check if we can use our pre-computed {p,s}space_data
+        if isinstance(occs_array, np.ndarray):
             # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
             arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
             pos_list = [occs.searchsorted(arange) for occs in occs_array]
+        elif occs_array == 'P':
+            occs_array = self._pspace
+            pos_list = self._pspace_data
+        elif occs_array == 'S':
+            occs_array = self._sspace
+            pos_list = self._sspace_data
+        else:
+            raise ValueError('invalid `occs_array` argument')
 
         # Reshape parameter array to APIG matrix
         x_mat = x.reshape(self._wfn.nbasis, self._wfn.nocc_up)

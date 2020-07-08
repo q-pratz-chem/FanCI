@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod
 
 from collections import OrderedDict
 
-from typing import Any, Callable, Dict, Sequence, Tuple
+from typing import Any, Callable, Dict, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -457,7 +457,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   c_m
         #
-        ovlp = self.compute_overlap(x[:-1], self._sspace, mode='S')
+        ovlp = self.compute_overlap(x[:-1], 'S')
 
         # Compute objective function:
         #
@@ -511,7 +511,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   d(c_m)/d(p_k)
         #
-        d_ovlp = self.compute_overlap_deriv(x[:-1], self._sspace, mode='S')
+        d_ovlp = self.compute_overlap_deriv(x[:-1], 'S')
 
         # Check is energy parameter is active:
         if self._mask[-1]:
@@ -520,7 +520,7 @@ class FanCI(metaclass=ABCMeta):
             #
             #   dE/d(p_k) <n|\Psi> = dE/d(p_k) \delta_{nk} c_n
             #
-            ovlp = self.compute_overlap(x[:-1], self._pspace, mode='P')
+            ovlp = self.compute_overlap(x[:-1], 'P')
             ovlp *= -1
             jac_proj[:, -1] = ovlp
             #
@@ -657,8 +657,7 @@ class FanCI(metaclass=ABCMeta):
         return masked_f
 
     @abstractmethod
-    def compute_overlap(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
-            -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -666,10 +665,9 @@ class FanCI(metaclass=ABCMeta):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
@@ -681,7 +679,7 @@ class FanCI(metaclass=ABCMeta):
         raise NotImplementedError('this method must be overwritten in a sub-class')
 
     @abstractmethod
-    def compute_overlap_deriv(self, x: np.ndarray, occs_array: np.ndarray, mode: str = None) \
+    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
             -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
@@ -690,10 +688,9 @@ class FanCI(metaclass=ABCMeta):
         ----------
         x : np.ndarray
             Parameter array, [p_0, p_1, ..., p_n].
-        occs_array : np.ndarray
-            Array of determinant occupations for which to compute overlap derivative.
-        mode : ('P' | 'S'), optional
-            Optional flag that indicates whether ``occs_array`` corresponds to the "P" space
+        occs_array : (np.ndarray | 'P' | 'S')
+            Array of determinant occupations for which to compute overlap. A string "P" or "S" can
+            be passed instead that indicates whether ``occs_array`` corresponds to the "P" space
             or "S" space, so that a more efficient, specialized computation can be done for these.
 
         Returns
