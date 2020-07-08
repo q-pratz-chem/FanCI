@@ -62,7 +62,7 @@ def test_apig_init_defaults():
     #     wfn = pyci.doci_wfn(ham.nbasis, nocc)
     # >   ???
     # E   ValueError: failed check: nbasis > nocc > 0
-    test = APIG(ham, nbasis)
+    test = APIG(ham, nocc)
 
     # assert test.nparam == nbasis * nocc + 1
     # assert test.nproj == nbasis * nocc + 1
@@ -93,7 +93,7 @@ def test_apig_init_custom():
     # Define input options
     wfn_custom = pyci.doci_wfn(nbasis, nocc)
 
-    test = APIG(ham, nbasis)
+    test = APIG(ham, nocc)
 
 
 @pytest.mark.xfail
@@ -108,7 +108,7 @@ def test_apig_init_underdeterminedsystem():
     ham = pyci.restricted_ham(0.0, one_mo, two_mo)
     # Define input options
 
-    # test = APIG(ham, nbasis)
+    # test = APIG(ham, nocc)
 
 
 def test_apig_compute_overlap():

@@ -5,9 +5,12 @@ FanCI test module.
 
 from os import path
 
+from .derivcheck import assert_deriv
+
 
 __all__ = [
     'find_datafile',
+    'assert_deriv',
     ]
 
 
