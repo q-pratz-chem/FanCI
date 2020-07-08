@@ -5,8 +5,6 @@ Run `python setup.py --help` for help.
 
 """
 
-from io import open
-
 from setuptools import setup
 
 
@@ -50,7 +48,7 @@ packages = [
 
 
 package_data = {
-    'fanci.test': ['data/*.npy'],
+    'fanci.test': ['data/*.fcidump', 'data/*.npy', 'data/*.npz'],
     }
 
 

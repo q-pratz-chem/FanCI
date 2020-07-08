@@ -270,10 +270,10 @@ class FanCI(metaclass=ABCMeta):
 
         # Fill wfn with S space determinants
         for det in wfn.to_det_array(nproj):
-            wfn.add_excited_dets(*connections, det=det)
+            wfn.add_excited_dets(*connections, ref=det)
 
         # Compute arrays of occupations (flattened; spin-up, then spin-down if applicable)
-        sspace = wfn.to_occs_array()
+        sspace = wfn.to_occ_array()
         sspace = sspace.reshape(sspace.shape[0], -1)
         pspace = sspace[:nproj]
 
@@ -344,7 +344,7 @@ class FanCI(metaclass=ABCMeta):
             j = self.compute_jacobian
 
         # Set up initial arguments to optimizer
-        opt_args = (f,)
+        opt_args = f, x0
         opt_kwargs = kwargs.copy()
         if use_jac:
             opt_kwargs['jac'] = j

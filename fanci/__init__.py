@@ -8,6 +8,7 @@ __all__ = [
     'FanCI',
     'APIG',
     'AP1roG',
+    'DetRatio',
     ]
 
 
