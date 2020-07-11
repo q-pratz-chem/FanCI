@@ -529,7 +529,7 @@ class FanCI(metaclass=ABCMeta):
             jac_proj = jac_proj[:, :-1]
 
         # Iterate over remaining columns of Jacobian and d_ovlp
-        for jac_col, d_ovlp_row in zip(jac_proj.transpose(), d_ovlp.transpose()):
+        for jac_col, d_ovlp_col in zip(jac_proj.transpose(), d_ovlp.transpose()):
             #
             # Compute each column of the Jacobian:
             #
@@ -538,10 +538,8 @@ class FanCI(metaclass=ABCMeta):
             #   E d(<n|\Psi>)/d(p_k) = E \delta_{nk} d(c_n)/d(p_k)
             #
             # Note: we update d_ovlp in-place here
-            print(self._ci_op.shape)
-            print(d_ovlp_row.shape)
-            self._ci_op(d_ovlp_row, out=jac_col)
-            d_ovlp_proj = d_ovlp_row[:self._nproj]
+            self._ci_op(d_ovlp_col, out=jac_col)
+            d_ovlp_proj = d_ovlp_col[:self._nproj]
             d_ovlp_proj *= energy
             jac_col -= d_ovlp_proj
 

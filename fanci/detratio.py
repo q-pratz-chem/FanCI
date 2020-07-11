@@ -161,8 +161,8 @@ class DetRatio(FanCI):
         # Compute overlaps of occupation vectors
         y = np.empty(occs_array.shape[0], dtype=pyci.c_double)
         for i, occs in enumerate(occs_array):
-            y[i] = np.prod(np.linalg.det(n_mat[occs]) for n_mat in n_mats) \
-                 / np.prod(np.linalg.det(d_mat[occs]) for d_mat in d_mats)
+            y[i] = np.prod([np.linalg.det(n_mat[occs]) for n_mat in n_mats]) \
+                 / np.prod([np.linalg.det(d_mat[occs]) for d_mat in d_mats])
         return y
 
     def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
