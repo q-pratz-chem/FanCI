@@ -17,8 +17,8 @@ import pyci
 
 
 __all__ = [
-    'FanCI',
-    ]
+    "FanCI",
+]
 
 
 Constraint = Tuple[Callable, Callable]
@@ -162,13 +162,18 @@ class FanCI(metaclass=ABCMeta):
         """
         return self._wfn.nvir_dn
 
-    def __init__(self, ham: pyci.hamiltonian, wfn: pyci.wavefunction, nproj: int, nparam: int,
-            norm_param: Sequence[Tuple[int, float]] = None,
-            norm_det: Sequence[Tuple[int, float]] = None,
-            constraints: Dict[str, Constraint] = None,
-            mask: Sequence[int] = None,
-            fill: str = 'excitation',
-            ) -> None:
+    def __init__(
+        self,
+        ham: pyci.hamiltonian,
+        wfn: pyci.wavefunction,
+        nproj: int,
+        nparam: int,
+        norm_param: Sequence[Tuple[int, float]] = None,
+        norm_det: Sequence[Tuple[int, float]] = None,
+        constraints: Dict[str, Constraint] = None,
+        mask: Sequence[int] = None,
+        fill: str = 'excitation',
+    ) -> None:
         r"""
         Initialize the FanCI problem.
 
@@ -208,16 +213,16 @@ class FanCI(metaclass=ABCMeta):
         elif isinstance(constraints, dict):
             constraints = OrderedDict(constraints)
         else:
-            raise TypeError('`constraints` must be dictionary `{name: (f, dfdx)}`')
+            raise TypeError("`constraints` must be dictionary `{name: (f, dfdx)}`")
 
         # Add norm_det and norm_param constraints
         norm_param = list() if norm_param is None else norm_param
         norm_det = list() if norm_det is None else norm_det
         for index, value in norm_param:
-            name = f'p_{{{index}}} - v_{{{index}}}'
+            name = f"p_{{{index}}} - v_{{{index}}}"
             constraints[name] = self.make_param_constraint(index, value)
         for index, value in norm_det:
-            name = f'<\\psi_{{{index}}}|\\Psi> - v_{{{index}}}'
+            name = f"<\\psi_{{{index}}}|\\Psi> - v_{{{index}}}"
             constraints[name] = self.make_det_constraint(index, value)
 
         # Number of nonlinear equations
@@ -231,7 +236,7 @@ class FanCI(metaclass=ABCMeta):
             if mask.dtype == np.bool:
                 # Check length of boolean mask
                 if mask.size != nparam:
-                    raise ValueError('boolean mask must have length `nparam`')
+                    raise ValueError("boolean mask must have length `nparam`")
             else:
                 # Convert integer mask to boolean
                 ints = mask
@@ -243,7 +248,7 @@ class FanCI(metaclass=ABCMeta):
 
         # Check if system is underdetermined
         if nequation < nactive:
-            raise ValueError('system is underdetermined')
+            raise ValueError("system is underdetermined")
 
         # Generate determinant spaces
         # ---------------------------
@@ -261,7 +266,7 @@ class FanCI(metaclass=ABCMeta):
             s_max = min(wfn.nocc_up, wfn.nvir_up)
             connections = (1, 2)
         else:
-            raise TypeError('`wfn` must be a `pyci.{doci,fullci,genci}_wfn`')
+            raise TypeError("`wfn` must be a `pyci.{doci,fullci,genci}_wfn`")
 
         if fill is None:
             # Don't fill wave function
@@ -289,7 +294,7 @@ class FanCI(metaclass=ABCMeta):
                     pyci.add_seniorities(wfn, nsen)
 
         if len(wfn) < nproj:
-            raise ValueError('unable to generate `nproj` determinants')
+            raise ValueError("unable to generate `nproj` determinants")
 
         # Truncate wave function if we generated > nproj determinants
         if len(wfn) > nproj:
@@ -325,8 +330,9 @@ class FanCI(metaclass=ABCMeta):
         self._sspace.setflags(write=False)
         self._mask_view.setflags(write=False)
 
-    def optimize(self, x0: np.ndarray, mode: str = 'lstsq', use_jac: bool = False, **kwargs: Any) \
-            -> OptimizeResult:
+    def optimize(
+        self, x0: np.ndarray, mode: str = "lstsq", use_jac: bool = False, **kwargs: Any
+    ) -> OptimizeResult:
         r"""
         Optimize the wave function parameters.
 
@@ -349,10 +355,10 @@ class FanCI(metaclass=ABCMeta):
         """
         # Check x0 vector length
         if x0.size != self.nparam:
-            raise ValueError('length of `x0` does not match `param`')
+            raise ValueError("length of `x0` does not match `param`")
         # Check if system is underdetermined
         elif self.nequation < self.nactive:
-            raise ValueError('system is underdetermined')
+            raise ValueError("system is underdetermined")
 
         # Convert x0 to proper dtype array
         x0 = np.array(x0, dtype=pyci.c_double)
@@ -373,19 +379,19 @@ class FanCI(metaclass=ABCMeta):
         opt_args = f, x0
         opt_kwargs = kwargs.copy()
         if use_jac:
-            opt_kwargs['jac'] = j
+            opt_kwargs["jac"] = j
 
         # Parse mode parameter; choose optimizer and fix arguments
-        if mode == 'lstsq':
+        if mode == "lstsq":
             optimizer = least_squares
-        elif mode == 'root':
+        elif mode == "root":
             if self.nequation != self.nactive:
-                raise ValueError('\'root\' does not work with over-determined system')
+                raise ValueError("'root' does not work with over-determined system")
             optimizer = root
-        elif mode == 'cma':
+        elif mode == "cma":
             raise NotImplementedError
         else:
-            raise ValueError('invalid mode parameter')
+            raise ValueError("invalid mode parameter")
 
         # Run optimizer
         return optimizer(*opt_args, **opt_kwargs)
@@ -473,8 +479,8 @@ class FanCI(metaclass=ABCMeta):
         """
         # Allocate objective vector
         f = np.empty(self._nequation, dtype=pyci.c_double)
-        f_proj = f[:self._nproj]
-        f_cons = f[self._nproj:]
+        f_proj = f[: self._nproj]
+        f_cons = f[self._nproj :]
 
         # Assign Energy = x[-1]
         energy = x[-1]
@@ -483,7 +489,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   c_m
         #
-        ovlp = self.compute_overlap(x[:-1], 'S')
+        ovlp = self.compute_overlap(x[:-1], "S")
 
         # Compute objective function:
         #
@@ -493,7 +499,7 @@ class FanCI(metaclass=ABCMeta):
         #
         # Note: we update ovlp in-place here
         self._ci_op(ovlp, out=f_proj)
-        ovlp_proj = ovlp[:self._nproj]
+        ovlp_proj = ovlp[: self._nproj]
         ovlp_proj *= energy
         f_proj -= ovlp_proj
 
@@ -522,9 +528,9 @@ class FanCI(metaclass=ABCMeta):
 
         """
         # Allocate Jacobian matrix (in transpose memory order)
-        jac = np.empty((self._nequation, self._nactive), order='F', dtype=pyci.c_double)
-        jac_proj = jac[:self._nproj]
-        jac_cons = jac[self._nproj:]
+        jac = np.empty((self._nequation, self._nactive), order="F", dtype=pyci.c_double)
+        jac_proj = jac[: self._nproj]
+        jac_cons = jac[self._nproj :]
 
         # Assign Energy = x[-1]
         energy = x[-1]
@@ -537,7 +543,7 @@ class FanCI(metaclass=ABCMeta):
         #
         #   d(c_m)/d(p_k)
         #
-        d_ovlp = self.compute_overlap_deriv(x[:-1], 'S')
+        d_ovlp = self.compute_overlap_deriv(x[:-1], "S")
 
         # Check is energy parameter is active:
         if self._mask[-1]:
@@ -546,7 +552,7 @@ class FanCI(metaclass=ABCMeta):
             #
             #   dE/d(p_k) <n|\Psi> = dE/d(p_k) \delta_{nk} c_n
             #
-            ovlp = self.compute_overlap(x[:-1], 'P')
+            ovlp = self.compute_overlap(x[:-1], "P")
             ovlp *= -1
             jac_proj[:, -1] = ovlp
             #
@@ -565,7 +571,7 @@ class FanCI(metaclass=ABCMeta):
             #
             # Note: we update d_ovlp in-place here
             self._ci_op(d_ovlp_col, out=jac_col)
-            d_ovlp_proj = d_ovlp_col[:self._nproj]
+            d_ovlp_proj = d_ovlp_col[: self._nproj]
             d_ovlp_proj *= energy
             jac_col -= d_ovlp_proj
 
@@ -595,6 +601,7 @@ class FanCI(metaclass=ABCMeta):
             Gradient of constraint function.
 
         """
+
         def f(x: np.ndarray) -> float:
             r""""
             Constraint function p_{i} - v_{i}.
@@ -633,6 +640,7 @@ class FanCI(metaclass=ABCMeta):
             Gradient of constraint function.
 
         """
+
         def f(x: np.ndarray) -> float:
             r""""
             Constraint function <\psi_{i}|\Psi> - v_{i}.
@@ -645,7 +653,10 @@ class FanCI(metaclass=ABCMeta):
             Constraint gradient d(<\psi_{i}|\Psi>)/d(p_{k}).
 
             """
-            return self.compute_overlap_deriv(x[:-1], self._sspace[np.newaxis, i])[0]
+            y = np.zeros(self._nactive, dtype=pyci.c_double)
+            d_ovlp = self.compute_overlap_deriv(x[:-1], self._sspace[np.newaxis, i])[0]
+            y[: self._nactive - self._mask[i]] = d_ovlp
+            return y
 
         return f, dfdx
 
@@ -681,7 +692,9 @@ class FanCI(metaclass=ABCMeta):
         return masked_f
 
     @abstractmethod
-    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
+    def compute_overlap(
+        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -700,11 +713,12 @@ class FanCI(metaclass=ABCMeta):
             Overlap vector.
 
         """
-        raise NotImplementedError('this method must be overwritten in a sub-class')
+        raise NotImplementedError("this method must be overwritten in a sub-class")
 
     @abstractmethod
-    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
-            -> np.ndarray:
+    def compute_overlap_deriv(
+        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -723,4 +737,5 @@ class FanCI(metaclass=ABCMeta):
             Overlap derivative matrix.
 
         """
-        raise NotImplementedError('this method must be overwritten in a sub-class')
+        raise NotImplementedError("this method must be overwritten in a sub-class")
+
