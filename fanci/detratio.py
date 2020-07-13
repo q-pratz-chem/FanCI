@@ -16,8 +16,8 @@ from .fanci import FanCI
 
 
 __all___ = [
-        'DetRatio',
-        ]
+    "DetRatio",
+]
 
 
 class DetRatio(FanCI):
@@ -26,8 +26,16 @@ class DetRatio(FanCI):
 
     """
 
-    def __init__(self, ham: pyci.hamiltonian, nocc: int, numerator : int, denominator: int,
-            nproj: int = None, wfn: pyci.doci_wfn = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        ham: pyci.hamiltonian,
+        nocc: int,
+        numerator: int,
+        denominator: int,
+        nproj: int = None,
+        wfn: pyci.doci_wfn = None,
+        **kwargs: Any
+    ) -> None:
         r"""
         Initialize the FanCI problem.
 
@@ -52,10 +60,13 @@ class DetRatio(FanCI):
         # Parse arguments
         # ---------------
 
+        if not isinstance(ham, pyci.hamiltonian):
+            raise TypeError("ham must be a `pyci.hamiltonian`")
+
         # Check number of matrices
         nmatrices = numerator + denominator
         if nmatrices % 2:
-            raise ValueError('Number of matrices cannot be odd')
+            raise ValueError("Number of matrices cannot be odd")
 
         # Compute number of parameters (c_{i;kl} + energy)
         nparam = nmatrices * ham.nbasis * nocc + 1
@@ -83,7 +94,7 @@ class DetRatio(FanCI):
         # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in "S" space
         arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
         sspace_data = [occs.searchsorted(arange) for occs in self._sspace]
-        pspace_data = sspace_data[:self._nproj]
+        pspace_data = sspace_data[: self._nproj]
 
         # Save sub-class -specific attributes
         # -----------------------------------
@@ -125,7 +136,9 @@ class DetRatio(FanCI):
         # Update nactive
         self._nactive = self._mask.sum()
 
-    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
+    def compute_overlap(
+        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -146,27 +159,29 @@ class DetRatio(FanCI):
         """
         if isinstance(occs_array, np.ndarray):
             pass
-        elif occs_array == 'P':
+        elif occs_array == "P":
             occs_array = self._pspace
-        elif occs_array == 'S':
+        elif occs_array == "S":
             occs_array = self._sspace
         else:
-            raise ValueError('invalid `occs_array` argument')
+            raise ValueError("invalid `occs_array` argument")
 
         # Reshape parameter array to numerator and denominator matrices
         x_mats = x.reshape(self._nmatrices, self._wfn.nbasis, self._wfn.nocc_up)
-        n_mats = x_mats[:self._numerator]
-        d_mats = x_mats[self._numerator:]
+        n_mats = x_mats[: self._numerator]
+        d_mats = x_mats[self._numerator :]
 
         # Compute overlaps of occupation vectors
         y = np.empty(occs_array.shape[0], dtype=pyci.c_double)
         for i, occs in enumerate(occs_array):
-            y[i] = np.prod([np.linalg.det(n_mat[occs]) for n_mat in n_mats]) \
-                 / np.prod([np.linalg.det(d_mat[occs]) for d_mat in d_mats])
+            y[i] = np.prod([np.linalg.det(n_mat[occs]) for n_mat in n_mats]) / np.prod(
+                [np.linalg.det(d_mat[occs]) for d_mat in d_mats]
+            )
         return y
 
-    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
-            -> np.ndarray:
+    def compute_overlap_deriv(
+        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -190,22 +205,24 @@ class DetRatio(FanCI):
             # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
             arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
             pos_list = [occs.searchsorted(arange) for occs in occs_array]
-        elif occs_array == 'P':
+        elif occs_array == "P":
             occs_array = self._pspace
             pos_list = self._pspace_data
-        elif occs_array == 'S':
+        elif occs_array == "S":
             occs_array = self._sspace
             pos_list = self._sspace_data
         else:
-            raise ValueError('invalid `occs_array` argument')
+            raise ValueError("invalid `occs_array` argument")
 
         # Reshape parameter array to numerator and denominator matrices
         x_mats = x.reshape(self._nmatrices, self._wfn.nbasis, self._wfn.nocc_up)
-        n_mats = x_mats[:self._numerator]
-        d_mats = x_mats[self._numerator:]
+        n_mats = x_mats[: self._numerator]
+        d_mats = x_mats[self._numerator :]
 
         # Shape of y is (no. determinants, no. active parameters excluding energy)
-        y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
+        y = np.zeros(
+            (occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double
+        )
 
         # Iterate over occupation vectors
         for y_row, occs, positions in zip(y, occs_array, pos_list):
@@ -218,7 +235,7 @@ class DetRatio(FanCI):
 
             # Get results of 'searchsorted' of each {k,l} in occs
             k_positions = positions
-            l_positions = positions[:self._wfn.nocc_up]
+            l_positions = positions[: self._wfn.nocc_up]
 
             # Iterate over all parameters (i), active parameters (j)
             i = -1
@@ -249,8 +266,13 @@ class DetRatio(FanCI):
                         if k_slice.size and l_pos != occs.size and occs[l_pos] == l:
                             # Compute derivative of overlap function
                             minor = np.delete(n_mat[k_slice], l, axis=1)
-                            y_row[j] = k_sign * l_sign * n_det_prod * np.linalg.det(minor) \
-                                     / (n_det * d_det_prod)
+                            y_row[j] = (
+                                k_sign
+                                * l_sign
+                                * n_det_prod
+                                * np.linalg.det(minor)
+                                / (n_det * d_det_prod)
+                            )
 
             # Iterate over denominator matrices
             for d_mat, d_det in zip(d_mats, d_dets):
@@ -277,8 +299,12 @@ class DetRatio(FanCI):
                         if k_slice.size and l_pos != occs.size and occs[l_pos] == l:
                             # Compute derivative of overlap function
                             minor = np.delete(d_mat[k_slice], l, axis=1)
-                            y_row[j] = -k_sign * l_sign * n_det_prod \
-                                     / (np.linalg.det(minor) * d_det * d_det_prod)
+                            y_row[j] = (
+                                -k_sign
+                                * l_sign
+                                * n_det_prod
+                                / (np.linalg.det(minor) * d_det * d_det_prod)
+                            )
 
         # Return overlap derivative matrix
         return y
