@@ -145,8 +145,7 @@ def systems_ground():
     for p in options_list:
         yield p
 
-
-@pytest.mark.xfail
+# @pytest.mark.slow
 @pytest.mark.parametrize(
     "nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground()
 )
@@ -160,14 +159,23 @@ def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expecte
     nmatrices = numerator + denominator
     apig = DetRatio(ham, nocc, numerator, denominator, nproj=nproj, norm_det=normdet)
 
+    # Make initial guess.
+    # Based on FanPy's DeterminantRatio template_params()
+    # Add random numbers on virtual orbital matrix positions.
     params_guess = np.zeros((nmatrices * ham.nbasis * nocc + 1), dtype=pyci.c_double)
-    params_guess[: (ham.nbasis * nocc)] = np.eye(ham.nbasis, nocc).transpose().flatten()
-    params_guess[(ham.nbasis * nocc) : -1] = (
-        np.eye(ham.nbasis, nocc).transpose().flatten()
-    )
     params_guess[-1] = e_hf
-    # FIXME: least_squares.py:814: ValueError
-    # ValueError: Residuals are not finite in the initial point.
+    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[0, :, :] = np.eye(
+        ham.nbasis, nocc
+    )
+    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[1, :, :] = np.eye(
+        ham.nbasis, nocc
+    )
+    rows = [i for i in range(ham.nbasis) if i not in range(nocc)]
+    np.random.seed(2)
+    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[1, rows, :] = np.random.rand(
+        len(rows), nocc
+    )
+
     results = apig.optimize(params_guess)
     apig_energy = results.x[-1] + nucnuc
     assert np.allclose(apig_energy, expected)
