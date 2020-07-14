@@ -167,6 +167,7 @@ class FanCI(metaclass=ABCMeta):
             norm_det: Sequence[Tuple[int, float]] = None,
             constraints: Dict[str, Constraint] = None,
             mask: Sequence[int] = None,
+            fill: str = 'excitation',
             ) -> None:
         r"""
         Initialize the FanCI problem.
@@ -193,6 +194,9 @@ class FanCI(metaclass=ABCMeta):
             List of parameters to freeze. If the list contains ints, then each element corresponds
             to a frozen parameter. If the list contains bools, then each element indicates whether
             that parameter is active (True) or frozen (False).
+        fill : ('excitation' | 'seniority' | None)
+            Whether to fill the projection ("P") space by excitation level, by seniority, or not
+            at all (in which case ``wfn`` must already be filled).
 
         """
         # Parse arguments
@@ -248,19 +252,42 @@ class FanCI(metaclass=ABCMeta):
         wfn = wfn.copy()
         if isinstance(wfn, pyci.doci_wfn):
             e_max = min(wfn.nocc_up, wfn.nvir_up)
+            s_min = 0
+            s_max = 0
             connections = (1,)
         elif isinstance(wfn, (pyci.fullci_wfn, pyci.genci_wfn)):
             e_max = min(wfn.nocc, wfn.nvir)
+            s_min = wfn.nocc_up - wfn.nocc_dn
+            s_max = min(wfn.nocc_up, wfn.nvir_up)
             connections = (1, 2)
         else:
             raise TypeError('`wfn` must be a `pyci.{doci,fullci,genci}_wfn`')
 
-        # Fill wfn with P space determinants in excitation order until len(wfn) >= nproj;
-        # only add Hartree-Fock det. (zero order excitation) if wfn is empty
-        for nexc in range(bool(len(wfn)), e_max + 1):
-            if len(wfn) >= nproj:
-                break
-            wfn.add_excited_dets(nexc)
+        if fill is None:
+            # Don't fill wave function
+            pass
+
+        elif fill == 'excitation':
+            # Fill wfn with P space determinants in excitation order until len(wfn) >= nproj;
+            # only add Hartree-Fock det. (zero order excitation) if wfn is empty
+            for nexc in range(bool(len(wfn)), e_max + 1):
+                if len(wfn) >= nproj:
+                    break
+                pyci.add_excitations(wfn, nexc)
+
+        elif fill == 'seniority':
+            # Fill with determinants in increasing-seniority order
+            if isinstance(wfn, pyci.doci_wfn):
+                # doci_wfn only has seniority zero determinants; add them all
+                if len(wfn) < nproj:
+                    wfn.add_all_dets()
+            else:
+                # Valid seniorities increase by two from s_min
+                for nsen in range(s_min, s_max + 1, 2):
+                    if len(wfn) >= nproj:
+                        break
+                    pyci.add_seniorities(wfn, nsen)
+
         if len(wfn) < nproj:
             raise ValueError('unable to generate `nproj` determinants')
 
@@ -270,11 +297,10 @@ class FanCI(metaclass=ABCMeta):
 
         # Fill wfn with S space determinants
         for det in wfn.to_det_array(nproj):
-            wfn.add_excited_dets(*connections, ref=det)
+            pyci.add_excitations(wfn, *connections, ref=det)
 
-        # Compute arrays of occupations (flattened; spin-up, then spin-down if applicable)
+        # Compute arrays of occupations
         sspace = wfn.to_occ_array()
-        sspace = sspace.reshape(sspace.shape[0], -1)
         pspace = sspace[:nproj]
 
         # Compute CI matrix operator with nproj rows and len(wfn) columns

@@ -18,7 +18,7 @@ The following programs/libraries are required to run FanCI:
 -  Python_ (≥3.4)
 -  NumPy_ (≥1.13)
 -  SciPy_ (≥0.19)
--  PyCI_ (≥0.2)
+-  PyCI_ (≥0.3.5)
 
 Installation
 ------------
