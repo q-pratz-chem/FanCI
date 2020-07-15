@@ -157,7 +157,7 @@ def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expecte
     numerator = 1
     denominator = 1
     nmatrices = numerator + denominator
-    apig = DetRatio(ham, nocc, numerator, denominator, nproj=nproj, norm_det=normdet)
+    detratio = DetRatio(ham, nocc, numerator, denominator, nproj=nproj, norm_det=normdet)
 
     # Make initial guess.
     # Based on FanPy's DeterminantRatio template_params()
@@ -176,6 +176,6 @@ def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expecte
         len(rows), nocc
     )
 
-    results = apig.optimize(params_guess)
-    apig_energy = results.x[-1] + nucnuc
-    assert np.allclose(apig_energy, expected)
+    results = detratio.optimize(params_guess)
+    detratio_energy = results.x[-1] + nucnuc
+    assert np.allclose(detratio_energy, expected)

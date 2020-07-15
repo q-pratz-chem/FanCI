@@ -132,7 +132,7 @@ def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expecte
     apig = APIG(ham, nocc, nproj=nproj, norm_det=normdet)
 
     params_guess = np.zeros((ham.nbasis * nocc + 1), dtype=pyci.c_double)
-    params_guess[:-1] = np.eye(ham.nbasis, nocc).transpose().flatten()
+    params_guess[:-1].reshape(ham.nbasis, nocc)[:,:] = np.eye(ham.nbasis, nocc)
     params_guess[-1] = e_hf
     # results = apig.optimize(params_guess, use_jac=True)
     results = apig.optimize(params_guess)
