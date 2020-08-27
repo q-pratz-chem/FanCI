@@ -1,16 +1,13 @@
-r"""
-FanCI module.
-
-"""
+r"""FanCI module."""
 
 
 __all__ = [
-    'FANPTContainer',
-    'FANPTContainerEFree',
-    'FANPTContainerEParam',
-    'FANPTConstantTerms',
-    'FANPTUpdater',
-    ]
+    "FANPTContainer",
+    "FANPTContainerEFree",
+    "FANPTContainerEParam",
+    "FANPTConstantTerms",
+    "FANPTUpdater",
+]
 
 
 from .base_fanpt_container import FANPTContainer

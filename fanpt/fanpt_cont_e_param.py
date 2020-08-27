@@ -1,10 +1,12 @@
-"""Class that contains the elements required to perform a FANPT calculation with explicit E"""
+r"""Class that contains the elements required to perform a FANPT calculation with explicit E."""
+
 import numpy as np
+
 from .base_fanpt_container import FANPTContainer
 
 
 class FANPTContainerEParam(FANPTContainer):
-    """"Container for the matrices and vectors required ot perform a FANPT calculation.
+    r"""Container for the matrices and vectors required ot perform a FANPT calculation.
 
     We assume that the equations to be solved have the following structure:
 
@@ -104,9 +106,21 @@ class FANPTContainerEParam(FANPTContainer):
         Generate the coefficient matrix of the linear FANPT system of equations.
     """
 
-    def __init__(self, fanci_wfn, params, ham0, ham1, l=0, ref_sd=0, inorm=False,
-                 ham_ci_op=None, f_pot_ci_op=None, ovlp_s=None, d_ovlp_s=None):
-        """Initialize the FANPT container.
+    def __init__(
+        self,
+        fanci_wfn,
+        params,
+        ham0,
+        ham1,
+        l=0,
+        ref_sd=0,
+        inorm=False,
+        ham_ci_op=None,
+        f_pot_ci_op=None,
+        ovlp_s=None,
+        d_ovlp_s=None,
+    ):
+        r"""Initialize the FANPT container.
 
         Parameters
         ----------
@@ -132,12 +146,23 @@ class FANPTContainerEParam(FANPTContainer):
         d_ovlp_s : {np.ndarray, None}
             Derivatives of the overlaps in the "S" projection space.
         """
-        super().__init__(fanci_wfn, params, ham0, ham1, l, ref_sd, inorm,
-                         ham_ci_op, f_pot_ci_op, ovlp_s, d_ovlp_s)
+        super().__init__(
+            fanci_wfn,
+            params,
+            ham0,
+            ham1,
+            l,
+            ref_sd,
+            inorm,
+            ham_ci_op,
+            f_pot_ci_op,
+            ovlp_s,
+            d_ovlp_s,
+        )
         self.der2_g_e_wfnparams()
 
     def der_g_lambda(self):
-        """Derivative of the FANPT equations with respect to the lambda parameter.
+        r"""Derivative of the FANPT equations with respect to the lambda parameter.
 
         dG/dl = <n|f_pot|psi(l)>
 
@@ -148,12 +173,12 @@ class FANPTContainerEParam(FANPTContainer):
             numpy array with shape (self.nequations,).
         """
         f = np.zeros(self.nequation)
-        f_proj = f[:self.nproj]
+        f_proj = f[: self.nproj]
         self.f_pot_ci_op(self.ovlp_s, out=f_proj)
         self.d_g_lambda = f
 
     def der2_g_lambda_wfnparams(self):
-        """Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
+        r"""Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
 
         d^2G/dldp_k = <n|f_pot|dpsi(l)/dp_k>
 
@@ -169,13 +194,13 @@ class FANPTContainerEParam(FANPTContainer):
         else:
             ncolumns = self.nactive
         f = np.zeros((self.nequation, ncolumns), order="F")
-        f_proj = f[:self.nproj]
+        f_proj = f[: self.nproj]
         for f_proj_col, d_ovlp_col in zip(f_proj.transpose(), self.d_ovlp_s.transpose()):
             self.f_pot_ci_op(d_ovlp_col, out=f_proj_col)
         self.d2_g_lambda_wfnparams = f
 
     def der2_g_e_wfnparams(self):
-        """Derivative of the FANPT equations with respect to the energy and the wavefunction
+        r"""Derivative of the FANPT equations with respect to the energy and the wavefunction
         parameters.
 
         d^2G/dEdp_k = -<n|dpsi(l)/dp_k>
@@ -190,13 +215,13 @@ class FANPTContainerEParam(FANPTContainer):
         if self.active_energy:
             ncolumns = self.nactive - 1
             f = np.zeros((self.nequation, ncolumns), order="F")
-            f[:self.nproj] = -self.d_ovlp_s[:self.nproj]
+            f[: self.nproj] = -self.d_ovlp_s[: self.nproj]
             self.d2_g_e_wfnparams = f
         else:
             self.d2_g_e_wfnparams = None
 
     def gen_coeff_matrix(self):
-        """Generate the coefficient matrix of the linear FANPT system of equations.
+        r"""Generate the coefficient matrix of the linear FANPT system of equations.
 
         dG/dp_k = <n|ham(l)|dpsi(l)/dp_k> - E * <n|dpsi/dp_k>
 

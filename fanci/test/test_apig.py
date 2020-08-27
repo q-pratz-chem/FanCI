@@ -1,7 +1,5 @@
 """ Test APIG"""
 
-import os
-
 import numpy as np
 
 import pytest
@@ -19,7 +17,7 @@ def dummy_system():
     nocc = 2
     one_mo = np.arange(nbasis ** 2, dtype=float).reshape(nbasis, nbasis)
     two_mo = np.arange(nbasis ** 4, dtype=float).reshape((nbasis,) * 4)
-    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
     params = np.arange(nbasis * nocc + 1, dtype=pyci.c_double) + 1
     return (ham, nocc, params)
 
@@ -32,10 +30,10 @@ def init_errors():
     nocc = 1
     one_mo = np.arange(nbasis ** 2, dtype=pyci.c_double).reshape(nbasis, nbasis)
     two_mo = np.arange(nbasis ** 4, dtype=pyci.c_double).reshape((nbasis,) * 4)
-    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
     # Define raise error input options
     nproj_valueerror = 4  # P space > S space
-    wfn_valueerror = pyci.doci_wfn(nbasis, 2)  # number of electrons don't match
+    wfn_valueerror = pyci.doci_wfn(nbasis, 2, 2)  # number of electrons don't match
 
     for p in [
         (TypeError, [nocc, ham], {}),
@@ -49,33 +47,9 @@ def init_errors():
 
 def systems_ground():
     options_list = [
-        (
-            1,
-            "h2_hf_sto6g",
-            0.71317683129,
-            -1.83843,
-            [(0, 1.0)],
-            2,
-            -1.1459130128588935,
-        ),
-        (
-            1,
-            "h2_hf_631gdp",
-            0.71317683129,
-            -1.84444,
-            [(0, 1.0)],
-            10,
-            -1.1565060295404896,
-        ),
-        (
-            2,
-            "lih_hf_sto6g",
-            0.995317634356,
-            -8.94728,
-            [(0, 1.0)],
-            15,
-            -7.968213475280394,
-        ),
+        (1, "h2_hf_sto6g", 0.71317683129, -1.83843, [(0, 1.0)], 2, -1.1459130128588935,),
+        (1, "h2_hf_631gdp", 0.71317683129, -1.84444, [(0, 1.0)], 10, -1.1565060295404896,),
+        (2, "lih_hf_sto6g", 0.995317634356, -8.94728, [(0, 1.0)], 15, -7.968213475280394,),
     ]
     for p in options_list:
         yield p
@@ -95,7 +69,7 @@ def test_apig_compute_overlap_deriv(dummy_system):
 
     f = lambda x: apig.compute_overlap(x, apig.sspace)
     j = lambda x: apig.compute_overlap_deriv(x, apig.sspace)
-    origin = np.zeros_like(params[:-1])
+    origin = np.random.rand(params[:-1].shape[0])
     assert_deriv(f, j, origin)
 
 
@@ -117,25 +91,22 @@ def test_apig_compute_jacobian(dummy_system):
 
     f = apig.compute_objective
     j = apig.compute_jacobian
-    origin = np.zeros_like(params)
+    origin = np.random.rand(params.shape[0])
     assert_deriv(f, j, origin)
 
 
-@pytest.mark.parametrize(
-    "nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground()
-)
+@pytest.mark.parametrize("nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground())
 def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expected):
     """Test cases adapted from FanCI's test_wfn_geminal_apig.
 
     """
-    ham = pyci.restricted_ham(find_datafile("{0:s}.fcidump".format(system)))
+    ham = pyci.hamiltonian(find_datafile("{0:s}.fcidump".format(system)))
     apig = APIG(ham, nocc, nproj=nproj, norm_det=normdet)
 
-    params_guess = np.zeros((ham.nbasis * nocc + 1), dtype=pyci.c_double)
-    params_guess[:-1].reshape(ham.nbasis, nocc)[:,:] = np.eye(ham.nbasis, nocc)
+    params_guess = np.zeros(apig.nparam, dtype=pyci.c_double)
+    params_guess[:-1].reshape(ham.nbasis, nocc)[:, :] = np.eye(ham.nbasis, nocc)
     params_guess[-1] = e_hf
-    # results = apig.optimize(params_guess, use_jac=True)
-    results = apig.optimize(params_guess)
+    results = apig.optimize(params_guess, use_jac=True)
     apig_energy = results.x[-1] + nucnuc
     assert np.allclose(apig_energy, expected)
 
@@ -149,7 +120,7 @@ def test_apig_h2_sto6g_excited():
     APIG (Electronic) Energy : -0.2416648697421632
 
     """
-    ham = pyci.restricted_ham(find_datafile("h2_hf_sto6g.fcidump"))
+    ham = pyci.hamiltonian(find_datafile("h2_hf_sto6g.fcidump"))
     params_guess = np.array([0.0, 0.9, -1.83843])
     apig = APIG(ham, 1, nproj=2, norm_det=[(1, 1.0)])
 
@@ -166,7 +137,7 @@ def test_apig_init_defaults():
     nocc = 2
     one_mo = np.arange(nbasis ** 2, dtype=pyci.c_double).reshape(nbasis, nbasis)
     two_mo = np.arange(nbasis ** 4, dtype=pyci.c_double).reshape((nbasis,) * 4)
-    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
+    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
 
     test = APIG(ham, nocc)
 

@@ -34,7 +34,7 @@ class DetRatio(FanCI):
         denominator: int,
         nproj: int = None,
         wfn: pyci.doci_wfn = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         r"""
         Initialize the FanCI problem.
@@ -57,16 +57,13 @@ class DetRatio(FanCI):
             Additional keyword arguments for base FanCI class.
 
         """
-        # Parse arguments
-        # ---------------
-
         if not isinstance(ham, pyci.hamiltonian):
-            raise TypeError("ham must be a `pyci.hamiltonian`")
+            raise TypeError(f"Invalid `ham` type `{type(ham)}`; must be `pyci.hamiltonian`")
 
         # Check number of matrices
         nmatrices = numerator + denominator
         if nmatrices % 2:
-            raise ValueError("Number of matrices cannot be odd")
+            raise ValueError(f"Number of matrices `nmatrices={nmatrices}` cannot be odd")
 
         # Compute number of parameters (c_{i;kl} + energy)
         nparam = nmatrices * ham.nbasis * nocc + 1
@@ -76,29 +73,21 @@ class DetRatio(FanCI):
 
         # Handle default wfn
         if wfn is None:
-            wfn = pyci.doci_wfn(ham.nbasis, nocc)
+            wfn = pyci.doci_wfn(ham.nbasis, nocc, nocc)
         elif not isinstance(wfn, pyci.doci_wfn):
-            raise TypeError("wfn must be a `pyci.doci_wfn`")
+            raise TypeError(f"Invalid `wfn` type `{type(wfn)}`; must be `pyci.doci_wfn`")
         elif wfn.nocc_up != nocc or wfn.nocc_dn != nocc:
-            raise ValueError("wfn.nocc_{up,dn} does not match nocc parameter")
+            raise ValueError(f"wfn.nocc_{{up,dn}} does not match `nocc={nocc}` parameter")
 
         # Initialize base class
-        # ---------------------
-
         FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
-        # Pre-compute data needed to compute the overlap (and its derivative) of the
-        # "P" space and "S" space determinants
-        # --------------------------------------------------------------------------
-
         # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in "S" space
-        arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
+        arange = np.arange(self._wfn.nbasis, dtype=pyci.c_long)
         sspace_data = [occs.searchsorted(arange) for occs in self._sspace]
         pspace_data = sspace_data[: self._nproj]
 
         # Save sub-class -specific attributes
-        # -----------------------------------
-
         self._nmatrices = nmatrices
         self._numerator = numerator
         self._denominator = denominator
@@ -136,9 +125,7 @@ class DetRatio(FanCI):
         # Update nactive
         self._nactive = self._mask.sum()
 
-    def compute_overlap(
-        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
-    ) -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -200,111 +187,84 @@ class DetRatio(FanCI):
             Overlap derivative array.
 
         """
-        # Check if we can use our pre-computed {p,s}space_data
         if isinstance(occs_array, np.ndarray):
-            # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each det. in occs_array
-            arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
-            pos_list = [occs.searchsorted(arange) for occs in occs_array]
+            pass
         elif occs_array == "P":
             occs_array = self._pspace
-            pos_list = self._pspace_data
         elif occs_array == "S":
             occs_array = self._sspace
-            pos_list = self._sspace_data
         else:
             raise ValueError("invalid `occs_array` argument")
 
         # Reshape parameter array to numerator and denominator matrices
         x_mats = x.reshape(self._nmatrices, self._wfn.nbasis, self._wfn.nocc_up)
-        n_mats = x_mats[: self._numerator]
-        d_mats = x_mats[self._numerator :]
+        mat_size = self._wfn.nbasis * self._wfn.nocc_up
 
         # Shape of y is (no. determinants, no. active parameters excluding energy)
-        y = np.zeros(
-            (occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double
-        )
+        y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
 
         # Iterate over occupation vectors
-        for y_row, occs, positions in zip(y, occs_array, pos_list):
+        col_inds = np.arange(self._wfn.nocc_up, dtype=pyci.c_long)
+        for y_row, occs in zip(y, occs_array):
 
             # Compute determinants of numerator and denominator matrices
-            n_dets = [np.linalg.det(n_mat[occs]) for n_mat in n_mats]
-            d_dets = [np.linalg.det(d_mat[occs]) for d_mat in d_mats]
-            n_det_prod = np.prod(n_dets)
-            d_det_prod = np.prod(d_dets)
+            dets = [np.linalg.det(mat[occs]) for mat in x_mats]
+            n_det_prod = np.prod(dets[: self._numerator])
+            d_det_prod = np.prod(dets[self._numerator :])
 
-            # Get results of 'searchsorted' of each {k,l} in occs
-            k_positions = positions
-            l_positions = positions[: self._wfn.nocc_up]
-
-            # Iterate over all parameters (i), active parameters (j)
+            # Iterate over all parameters (i) and active parameters (j)
             i = -1
             j = -1
 
             # Iterate over numerator matrices
-            for n_mat, n_det in zip(n_mats, n_dets):
-                # Iterate over row indices
-                k_sign = -1
-                for k, k_pos in enumerate(k_positions):
-                    k_sign *= -1
-                    # Check if row is present
-                    if k_pos != occs.size and occs[k_pos] == k:
-                        k_slice = np.delete(occs, k_pos, axis=0)
-                    else:
-                        k_slice = np.empty(0)
-                    # Iterate over column indices
-                    l_sign = -1
-                    for l, l_pos in enumerate(l_positions):
-                        l_sign *= -1
-                        # Check if parameter is active, advance (i, j)
-                        i += 1
-                        if not self._mask[i]:
-                            continue
-                        j += 1
-                        # Check if any rows remain after deleting k_pos
-                        # Check if column is present
-                        if k_slice.size and l_pos != occs.size and occs[l_pos] == l:
-                            # Compute derivative of overlap function
-                            minor = np.delete(n_mat[k_slice], l, axis=1)
-                            y_row[j] = (
-                                k_sign
-                                * l_sign
-                                * n_det_prod
-                                * np.linalg.det(minor)
-                                / (n_det * d_det_prod)
-                            )
+            for mask in self._mask[: self._numerator * mat_size]:
+                i += 1
+
+                # Check if element is active
+                if not mask:
+                    continue
+                j += 1
+
+                # Compute derivative of overlap function
+                m = i // mat_size
+                n = i % mat_size
+                r = n // self._wfn.nocc_up
+                c = n % self._wfn.nocc_up
+                rows = occs[occs != r]
+                cols = col_inds[col_inds != c]
+                if rows.size == cols.size == 0:
+                    y_row[j] = 1.0
+                elif rows.size != occs.size and cols.size != col_inds.size:
+                    val = -1 if np.searchsorted(occs, r) % 2 else +1
+                    val *= -1 if np.searchsorted(col_inds, c) % 2 else +1
+                    val *= n_det_prod * np.linalg.det(x_mats[m][rows, :][:, cols])
+                    val /= d_det_prod * dets[m]
+                    y_row[j] = val
 
             # Iterate over denominator matrices
-            for d_mat, d_det in zip(d_mats, d_dets):
-                # Iterate over row indices
-                k_sign = -1
-                for k, k_pos in enumerate(k_positions):
-                    k_sign *= -1
-                    # Check if row is present
-                    if k_pos != occs.size and occs[k_pos] == k:
-                        k_slice = np.delete(occs, k_pos, axis=0)
-                    else:
-                        k_slice = np.empty(0)
-                    # Iterate over column indices
-                    l_sign = -1
-                    for l, l_pos in enumerate(l_positions):
-                        l_sign *= -1
-                        # Check if parameter is active, advance (i, j)
-                        i += 1
-                        if not self._mask[i]:
-                            continue
-                        j += 1
-                        # Check if any rows remain after deleting k_pos
-                        # Check if column is present
-                        if k_slice.size and l_pos != occs.size and occs[l_pos] == l:
-                            # Compute derivative of overlap function
-                            minor = np.delete(d_mat[k_slice], l, axis=1)
-                            y_row[j] = (
-                                -k_sign
-                                * l_sign
-                                * n_det_prod
-                                / (np.linalg.det(minor) * d_det * d_det_prod)
-                            )
+            for mask in self._mask[self._numerator * mat_size : -1]:
+                i += 1
+
+                # Check if element is active
+                if not mask:
+                    continue
+                j += 1
+
+                # Compute derivative of overlap function
+                m = i // mat_size
+                n = i % mat_size
+                r = n // self._wfn.nocc_up
+                c = n % self._wfn.nocc_up
+                rows = occs[occs != r]
+                cols = col_inds[col_inds != c]
+                if rows.size == cols.size == 0:
+                    y_row[j] = 1.0
+                elif rows.size != occs.size and cols.size != col_inds.size:
+                    val = -1 if np.searchsorted(occs, r) % 2 else +1
+                    val *= +1 if np.searchsorted(col_inds, c) % 2 else -1
+                    val *= n_det_prod * np.linalg.det(x_mats[m][rows, :][:, cols])
+                    val /= d_det_prod * dets[m]
+                    y_row[j] = val
 
         # Return overlap derivative matrix
         return y

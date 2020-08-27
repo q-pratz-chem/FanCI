@@ -1,7 +1,5 @@
 """ Test DetRatio"""
 
-import os
-
 import numpy as np
 
 import pytest
@@ -14,12 +12,16 @@ from fanci.test import find_datafile, assert_deriv
 
 @pytest.fixture
 def dummy_system():
-    nbasis = 10
     nocc = 2
-    one_mo = np.arange(nbasis ** 2, dtype=float).reshape(nbasis, nbasis)
-    two_mo = np.arange(nbasis ** 4, dtype=float).reshape((nbasis,) * 4)
-    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
-    params = np.arange(2 * ham.nbasis * nocc + 1, dtype=pyci.c_double) + 1
+    ham = pyci.hamiltonian(find_datafile("be_ccpvdz.fcidump"))
+    params = np.zeros(2 * ham.nbasis * nocc + 1, dtype=pyci.c_double)
+    params[-1] = -14.6
+    params[:-1].reshape(-1, ham.nbasis, nocc)[0, :, :] = np.eye(ham.nbasis, nocc)
+    params[:-1].reshape(-1, ham.nbasis, nocc)[1, :, :] = np.eye(ham.nbasis, nocc)
+    rows = [i for i in range(ham.nbasis) if i not in range(nocc)]
+    np.random.seed(2)
+    params[:-1].reshape(-1, ham.nbasis, nocc)[1, rows, :] = 0.01 * np.random.rand(len(rows), nocc)
+    params[:-1] += 0.0001 * np.random.rand(*params[:-1].shape)
     return (ham, nocc, params)
 
 
@@ -31,8 +33,7 @@ def init_errors():
     nocc = 2
     one_mo = np.arange(nbasis ** 2, dtype=pyci.c_double).reshape(nbasis, nbasis)
     two_mo = np.arange(nbasis ** 4, dtype=pyci.c_double).reshape((nbasis,) * 4)
-    ham = pyci.restricted_ham(0.0, one_mo, two_mo)
-
+    ham = pyci.hamiltonian(0.0, one_mo, two_mo)
     for p in [
         (ValueError, [ham, nocc, 2, 1], {}),
     ]:
@@ -65,7 +66,7 @@ def test_detratio_init_defaults(dummy_system):
     assert test.nocc_dn == nocc
     assert test.nvir_up == ham.nbasis - nocc
     assert test.nvir_dn == ham.nbasis - nocc
-    assert test.pspace.shape[0] == 41
+    assert test.pspace.shape[0] == 57
 
 
 def test_detratio_freeze_matrix(dummy_system):
@@ -80,7 +81,7 @@ def test_detratio_freeze_matrix(dummy_system):
     assert np.allclose(detratio.mask, expected)
 
 
-def test_apig_compute_overlap(dummy_system):
+def test_detratio_compute_overlap(dummy_system):
     ham, nocc, params = dummy_system
     numerator = 1
     denominator = 1
@@ -96,8 +97,7 @@ def test_apig_compute_overlap(dummy_system):
         assert np.allclose(answer, expected)
 
 
-@pytest.mark.xfail
-def test_apig_compute_overlap_deriv(dummy_system):
+def test_detratio_compute_overlap_deriv(dummy_system):
     ham, nocc, params = dummy_system
     numerator = 1
     denominator = 1
@@ -105,12 +105,10 @@ def test_apig_compute_overlap_deriv(dummy_system):
 
     f = lambda x: detratio.compute_overlap(x, detratio.sspace)
     j = lambda x: detratio.compute_overlap_deriv(x, detratio.sspace)
-    # # origin = np.random.rand(len(params[:-1]))
-    origin = params[:-1]
-    assert_deriv(f, j, origin)
+    assert_deriv(f, j, params[:-1], widths=1.0e-5)
 
 
-def test_apig_compute_objective(dummy_system):
+def test_detratio_compute_objective(dummy_system):
     ham, nocc, params = dummy_system
     numerator = 1
     denominator = 1
@@ -124,18 +122,14 @@ def test_apig_compute_objective(dummy_system):
     assert np.allclose(objective, answer)
 
 
-@pytest.mark.xfail
-def test_apig_compute_jacobian(dummy_system):
+def test_detratio_compute_jacobian(dummy_system):
     ham, nocc, params = dummy_system
     numerator = 1
     denominator = 1
     detratio = DetRatio(ham, nocc, numerator, denominator)
-
-    f = lambda x: detratio.compute_objective
-    j = lambda x: detratio.compute_jacobian
-    # origin = np.random.rand(len(params))
-    origin = params[:-1]
-    assert_deriv(f, j, origin)
+    f = detratio.compute_objective
+    j = detratio.compute_jacobian
+    assert_deriv(f, j, params, widths=1.0e-5)
 
 
 def systems_ground():
@@ -145,15 +139,14 @@ def systems_ground():
     for p in options_list:
         yield p
 
+
 # @pytest.mark.slow
-@pytest.mark.parametrize(
-    "nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground()
-)
-def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expected):
+@pytest.mark.parametrize("nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground())
+def test_detratio_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expected):
     """Test cases adapted from FanCI's test_wfn_geminal_apig.
 
     """
-    ham = pyci.restricted_ham(find_datafile("{0:s}.fcidump".format(system)))
+    ham = pyci.hamiltonian(find_datafile("{0:s}.fcidump".format(system)))
     numerator = 1
     denominator = 1
     nmatrices = numerator + denominator
@@ -162,20 +155,15 @@ def test_apig_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expecte
     # Make initial guess.
     # Based on FanPy's DeterminantRatio template_params()
     # Add random numbers on virtual orbital matrix positions.
-    params_guess = np.zeros((nmatrices * ham.nbasis * nocc + 1), dtype=pyci.c_double)
-    params_guess[-1] = e_hf
-    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[0, :, :] = np.eye(
-        ham.nbasis, nocc
-    )
-    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[1, :, :] = np.eye(
-        ham.nbasis, nocc
-    )
+    params = np.zeros((nmatrices * ham.nbasis * nocc + 1), dtype=pyci.c_double)
+    params[-1] = e_hf
+    params[:-1].reshape(-1, ham.nbasis, nocc)[0, :, :] = np.eye(ham.nbasis, nocc)
+    params[:-1].reshape(-1, ham.nbasis, nocc)[1, :, :] = np.eye(ham.nbasis, nocc)
     rows = [i for i in range(ham.nbasis) if i not in range(nocc)]
     np.random.seed(2)
-    params_guess[:-1].reshape(nmatrices, ham.nbasis, nocc)[1, rows, :] = np.random.rand(
-        len(rows), nocc
-    )
+    params[:-1].reshape(-1, ham.nbasis, nocc)[1, rows, :] = np.random.rand(len(rows), nocc)
+    params[:-1] += 0.001 * np.random.rand(*params[:-1].shape)
 
-    results = detratio.optimize(params_guess)
+    results = detratio.optimize(params, use_jac=True)
     detratio_energy = results.x[-1] + nucnuc
     assert np.allclose(detratio_energy, expected)

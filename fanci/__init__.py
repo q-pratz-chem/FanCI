@@ -5,11 +5,11 @@ FanCI module.
 
 
 __all__ = [
-    'FanCI',
-    'APIG',
-    'AP1roG',
-    'DetRatio',
-    ]
+    "FanCI",
+    "APIG",
+    "AP1roG",
+    "DetRatio",
+]
 
 
 from .fanci import FanCI

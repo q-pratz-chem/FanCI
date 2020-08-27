@@ -4,7 +4,6 @@ FanCI AP1roG module.
 """
 
 from itertools import permutations
-
 from typing import Any, Union
 
 import numpy as np
@@ -15,8 +14,8 @@ from .fanci import FanCI
 
 
 __all___ = [
-    'AP1roG',
-    ]
+    "AP1roG",
+]
 
 
 class AP1roG(FanCI):
@@ -24,8 +23,15 @@ class AP1roG(FanCI):
     AP1roG FanCI class.
 
     """
-    def __init__(self, ham: pyci.hamiltonian, nocc: int, nproj: int = None,
-            wfn: pyci.doci_wfn = None, **kwargs: Any) -> None:
+
+    def __init__(
+        self,
+        ham: pyci.hamiltonian,
+        nocc: int,
+        nproj: int = None,
+        wfn: pyci.doci_wfn = None,
+        **kwargs: Any,
+    ) -> None:
         r"""
         Initialize the FanCI problem.
 
@@ -43,8 +49,8 @@ class AP1roG(FanCI):
             Additional keyword arguments for base FanCI class.
 
         """
-        # Parse arguments
-        # ---------------
+        if not isinstance(ham, pyci.hamiltonian):
+            raise TypeError(f"Invalid `ham` type `{type(ham)}`; must be `pyci.hamiltonian`")
 
         # Compute number of parameters (c_kl + energy)
         nparam = nocc * (ham.nbasis - nocc) + 1
@@ -54,48 +60,27 @@ class AP1roG(FanCI):
 
         # Handle default wfn (P space == single pair excitations)
         if wfn is None:
-            wfn = pyci.doci_wfn(ham.nbasis, nocc)
+            wfn = pyci.doci_wfn(ham.nbasis, nocc, nocc)
             wfn.add_excited_dets(1)
         elif not isinstance(wfn, pyci.doci_wfn):
-            raise TypeError('wfn must be a `pyci.doci_wfn`')
+            raise TypeError(f"Invalid `wfn` type `{type(wfn)}`; must be `pyci.doci_wfn`")
         elif wfn.nocc_up != nocc or wfn.nocc_dn != nocc:
-            raise ValueError('wfn.nocc_{up,dn} does not match nocc parameter')
+            raise ValueError(f"wfn.nocc_{{up,dn}} does not match `nocc={nocc}` parameter")
 
         # Initialize base class
-        # ---------------------
-
         FanCI.__init__(self, ham, wfn, nproj, nparam, **kwargs)
 
-        # Pre-compute data needed to compute the overlap (and its derivative) of the
-        # "P" space and "S" space determinants
-        # --------------------------------------------------------------------------
-
         # Assign reference occupations
-        ref_occs = np.arange(nocc, dtype=pyci.c_int)
+        ref_occs = np.arange(nocc, dtype=pyci.c_long)
 
         # Use set differences to get hole/particle indices
-        holes_list = [
-                np.setdiff1d(ref_occs, occs, assume_unique=1)
-                for occs in self._sspace
-                ]
-        parts_list = [
-                np.setdiff1d(occs, ref_occs, assume_unique=1) - self._wfn.nvir_up
-                for occs in self._sspace
-                ]
-
-        # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each holes/particles
-        arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
-        holes_pos_list = [holes.searchsorted(arange) for holes in holes_list]
-        parts_pos_list = [parts.searchsorted(arange) for parts in parts_list]
+        hlist = [np.setdiff1d(ref_occs, occs, assume_unique=1) for occs in self._sspace]
+        plist = [np.setdiff1d(occs, ref_occs, assume_unique=1) - nocc for occs in self._sspace]
 
         # Save sub-class -specific attributes
-        # -----------------------------------
-
         self._ref_occs = ref_occs
-        self._sspace_exc_data = holes_list, parts_list
-        self._pspace_exc_data = holes_list[:nproj], parts_list[:nproj]
-        self._sspace_pos_data = holes_pos_list, parts_pos_list
-        self._pspace_pos_data = holes_pos_list[:nproj], parts_pos_list[:nproj]
+        self._sspace_data = hlist, plist
+        self._pspace_data = hlist[:nproj], plist[:nproj]
 
     def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
@@ -116,38 +101,35 @@ class AP1roG(FanCI):
             Overlap array.
 
         """
-        # Check if we can use our pre-computed {p,s}space_exc_data
+        # Check if we can use our pre-computed {p,s}space_data
         if isinstance(occs_array, np.ndarray):
             # Use set differences to get hole/particle indices
-            holes_list = [
-                    np.setdiff1d(self._ref_occs, occs, assume_unique=1)
-                    for occs in occs_array
-                    ]
-            parts_list = [
-                    np.setdiff1d(occs, self._ref_occs, assume_unique=1) - self._wfn.nocc_up
-                    for occs in occs_array
-                    ]
-        elif occs_array == 'P':
+            nocc = self._wfn.nocc_up
+            ref_occs = self._ref_occs
+            hlist = [np.setdiff1d(ref_occs, occs, assume_unique=1) for occs in occs_array]
+            plist = [np.setdiff1d(occs, ref_occs, assume_unique=1) - nocc for occs in occs_array]
+        elif occs_array == "P":
             occs_array = self._pspace
-            holes_list, parts_list = self._pspace_exc_data
-        elif occs_array == 'S':
+            hlist, plist = self._pspace_data
+        elif occs_array == "S":
             occs_array = self._sspace
-            holes_list, parts_list = self._sspace_exc_data
+            hlist, plist = self._sspace_data
         else:
-            raise ValueError('invalid `occs_array` argument')
+            raise ValueError("invalid `occs_array` argument")
 
         # Reshape parameter array to AP1roG matrix
         x_mat = x.reshape(self._wfn.nocc_up, self._wfn.nvir_up)
 
         # Compute overlaps of occupation vectors
         y = np.empty(occs_array.shape[0], dtype=pyci.c_double)
-        for i, (occs, holes, parts) in enumerate(zip(occs_array, holes_list, parts_list)):
+        for i, (occs, holes, parts) in enumerate(zip(occs_array, hlist, plist)):
             # Overlap is equal to one for the reference determinant
-            y[i] = permanent(x_mat[holes][:, parts]) if holes.size else 1
+            y[i] = permanent(x_mat[holes, :][:, parts]) if holes.size else 1
         return y
 
-    def compute_overlap_deriv(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) \
-            -> np.ndarray:
+    def compute_overlap_deriv(
+        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
+    ) -> np.ndarray:
         r"""
         Compute the FanCI overlap derivative matrix.
 
@@ -169,28 +151,18 @@ class AP1roG(FanCI):
         # Check if we can use our precomputed {p,s}space_{exc,pos}_data
         if isinstance(occs_array, np.ndarray):
             # Use set differences to get hole/particle indices
-            holes_list = [
-                    np.setdiff1d(self._ref_occs, occs, assume_unique=1)
-                    for occs in occs_array
-                    ]
-            parts_list = [
-                    np.setdiff1d(occs, self._ref_occs, assume_unique=1) - self._wfn.nocc_up
-                    for occs in occs_array
-                    ]
-            # Get results of 'searchsorted(i)' from i=0 to i=nbasis for each holes/particles
-            arange = np.arange(self._wfn.nbasis, dtype=pyci.c_int)
-            holes_pos_list = [holes.searchsorted(arange) for holes in holes_list]
-            parts_pos_list = [parts.searchsorted(arange) for parts in parts_list]
-        elif occs_array == 'P':
+            nocc = self._wfn.nocc_up
+            ref_occs = self._ref_occs
+            hlist = [np.setdiff1d(ref_occs, occs, assume_unique=1) for occs in occs_array]
+            plist = [np.setdiff1d(occs, ref_occs, assume_unique=1) - nocc for occs in occs_array]
+        elif occs_array == "P":
             occs_array = self._pspace
-            holes_list, parts_list = self._pspace_exc_data
-            holes_pos_list, parts_pos_list = self._pspace_pos_data
-        elif occs_array == 'S':
+            hlist, plist = self._pspace_data
+        elif occs_array == "S":
             occs_array = self._sspace
-            holes_list, parts_list = self._sspace_exc_data
-            holes_pos_list, parts_pos_list = self._sspace_pos_data
+            hlist, plist = self._sspace_data
         else:
-            raise ValueError('invalid `occs_array` argument')
+            raise ValueError("invalid `occs_array` argument")
 
         # Reshape parameter array to AP1roG matrix
         x_mat = x.reshape(self._wfn.nocc_up, self._wfn.nvir_up)
@@ -199,47 +171,35 @@ class AP1roG(FanCI):
         y = np.zeros((occs_array.shape[0], self._nactive - self._mask[-1]), dtype=pyci.c_double)
 
         # Iterate over occupation vectors
-        iterator = zip(y, holes_list, parts_list, holes_pos_list, parts_pos_list)
-        for y_row, holes, parts, holes_pos, parts_pos in iterator:
+        for y_row, holes, parts in zip(y, hlist, plist):
 
-            # Check for reference determinant; d(<\psi|\Psi>)/dp == 0
-            if not holes.size:
-                continue
-
-            # Get results of 'searchsorted' of each {k,l} in holes,particles
-            k_positions = holes_pos[:self._wfn.nocc_up]
-            l_positions = parts_pos[:self._wfn.nvir_up]
-
-            # Iterate over all parameters (i), active parameters (j)
-            i = -1
+            # Iterate over all parameters (i) and active parameters (j)
             j = -1
+            for i, m in enumerate(self._mask[:-1]):
 
-            # Iterate over row indices
-            for k, k_pos in enumerate(k_positions):
-                # Check if row is present
-                if k_pos != holes.size and holes[k_pos] == k:
-                    k_slice = np.delete(holes, k_pos, axis=0)
-                else:
-                    k_slice = np.empty(0)
-                # Iterate over column indices
-                for l, l_pos in enumerate(l_positions):
-                    # Check if element is active, advance (i, j)
-                    i += 1
-                    if not self._mask[i]:
-                        continue
-                    j += 1
-                    # Check if any rows remain after deleting k_pos
-                    # Check if column is present
-                    if k_slice.size and l_pos != parts.size and parts[l_pos] == l:
-                        # Compute permanent of (k, l) minor
-                        l_slice = np.delete(parts, l_pos, axis=0)
-                        y_row[j] = permanent(x_mat[k_slice][:, l_slice])
+                # Check if element is active
+                if not m:
+                    continue
+                j += 1
+
+                # Check for reference determinant
+                if not holes.size:
+                    continue
+
+                # Cut out the rows and columns corresponding to the element wrt which the permanent
+                # is derivatized
+                rows = holes[holes != (i // self.wfn.nvir_up)]
+                cols = parts[parts != (i % self.wfn.nvir_up)]
+                if rows.size == cols.size == 0:
+                    y_row[j] = 1.0
+                elif rows.size != holes.size and cols.size != parts.size:
+                    y_row[j] = permanent(x_mat[rows, :][:, cols])
 
         # Return overlap derivative matrix
         return y
 
 
-def permanent(matrix : np.ndarray) -> float:
+def permanent(matrix: np.ndarray) -> float:
     r"""
     Compute the permanent of a square matrix.
 

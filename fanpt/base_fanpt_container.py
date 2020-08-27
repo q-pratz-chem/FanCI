@@ -1,10 +1,12 @@
-"""Base class that contains the elements required to perform a FANPT calculation"""
-import pyci
+r"""Base class that contains the elements required to perform a FANPT calculation."""
+
 from abc import ABCMeta, abstractmethod
+
+import pyci
 
 
 class FANPTContainer(metaclass=ABCMeta):
-    """"Container for the matrices and vectors required ot perform a FANPT calculation.
+    r"""Container for the matrices and vectors required ot perform a FANPT calculation.
 
     We assume that the equations to be solved have the following structure:
 
@@ -22,7 +24,7 @@ class FANPTContainer(metaclass=ABCMeta):
     have nequation elements and all the matrices have nequation rows, except for the coefficient
     matrix (dG/dp_k), only the first nproj elements of the vectors and the first nproj rows of
     the matrices are non-zero.
-    
+
     Attributes
     ----------
     fanci_wfn : FanCI instance
@@ -96,9 +98,22 @@ class FANPTContainer(metaclass=ABCMeta):
     gen_coeff_matrix(self)
         Generate the coefficient matrix of the linear FANPT system of equations.
     """
-    def __init__(self, fanci_wfn, params, ham0, ham1, l=0, ref_sd=0, inorm=False,
-                 ham_ci_op=None, f_pot_ci_op=None, ovlp_s=None, d_ovlp_s=None):
-        """Initialize the FANPT container.
+
+    def __init__(
+        self,
+        fanci_wfn,
+        params,
+        ham0,
+        ham1,
+        l=0,
+        ref_sd=0,
+        inorm=False,
+        ham_ci_op=None,
+        f_pot_ci_op=None,
+        ovlp_s=None,
+        d_ovlp_s=None,
+    ):
+        r"""Initialize the FANPT container.
 
         Parameters
         ----------
@@ -153,8 +168,7 @@ class FANPTContainer(metaclass=ABCMeta):
             self.f_pot_ci_op = f_pot_ci_op
         else:
             self.f_pot = FANPTContainer.linear_comb_ham(self.ham1, self.ham0, 1.0, -1.0)
-            self.f_pot_ci_op = pyci.sparse_op(self.f_pot, self.fanci_wfn.wfn,
-                                              self.fanci_wfn.nproj)
+            self.f_pot_ci_op = pyci.sparse_op(self.f_pot, self.fanci_wfn.wfn, self.fanci_wfn.nproj)
 
         if ovlp_s:
             self.ovlp_s = ovlp_s
@@ -173,8 +187,10 @@ class FANPTContainer(metaclass=ABCMeta):
             if f"<\\psi_{{{ref_sd}}}|\\Psi> - v_{{{ref_sd}}}" in self.fanci_wfn.constraints:
                 self.ref_sd = ref_sd
             else:
-                raise KeyError("The normalization of the Slater determinant is not constrained"
-                               "in the FanCI wavefunction.")
+                raise KeyError(
+                    "The normalization of the Slater determinant is not constrained"
+                    "in the FanCI wavefunction."
+                )
         else:
             self.ref_sd = ref_sd
 
@@ -185,7 +201,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @staticmethod
     def linear_comb_ham(ham1, ham0, a1, a0):
-        """Return a linear combination of two PyCI Hamiltonians.
+        r"""Return a linear combination of two PyCI Hamiltonians.
 
         Parameters
         ----------
@@ -209,7 +225,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @property
     def nactive(self):
-        """Return the number of active parameters.
+        r"""Return the number of active parameters.
 
         Returns
         -------
@@ -220,7 +236,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @property
     def nequation(self):
-        """Return the number of equations.
+        r"""Return the number of equations.
 
         Returns
         -------
@@ -231,7 +247,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @property
     def nproj(self):
-        """Return the number of determinants in the projection "P" space.
+        r"""Return the number of determinants in the projection "P" space.
 
         Returns
         -------
@@ -242,7 +258,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @abstractmethod
     def der_g_lambda(self):
-        """Derivative of the FANPT equations with respect to the lambda parameter.
+        r"""Derivative of the FANPT equations with respect to the lambda parameter.
 
         dG/dl
 
@@ -256,7 +272,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @abstractmethod
     def der2_g_lambda_wfnparams(self):
-        """Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
+        r"""Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
 
         d^2G/dldp_k
 
@@ -271,7 +287,7 @@ class FANPTContainer(metaclass=ABCMeta):
 
     @abstractmethod
     def gen_coeff_matrix(self):
-        """Generate the coefficient matrix of the linear FANPT system of equations.
+        r"""Generate the coefficient matrix of the linear FANPT system of equations.
 
         dG/dp_k
 

@@ -21,13 +21,6 @@ __all__ = [
 ]
 
 
-Constraint = Tuple[Callable, Callable]
-r"""
-Constraint function and gradient (f, dfdx) type hint.
-
-"""
-
-
 class FanCI(metaclass=ABCMeta):
     r"""
     FanCI problem class.
@@ -170,9 +163,9 @@ class FanCI(metaclass=ABCMeta):
         nparam: int,
         norm_param: Sequence[Tuple[int, float]] = None,
         norm_det: Sequence[Tuple[int, float]] = None,
-        constraints: Dict[str, Constraint] = None,
+        constraints: Dict[str, Tuple[Callable, Callable]] = None,
         mask: Sequence[int] = None,
-        fill: str = 'excitation',
+        fill: str = "excitation",
     ) -> None:
         r"""
         Initialize the FanCI problem.
@@ -193,7 +186,7 @@ class FanCI(metaclass=ABCMeta):
         norm_det : Sequence[Tuple[int, float]], optional
             Indices of determinant whose overlaps to constrain, and the value to which to constrain
             them.
-        constraints : Dict[str, Constraint], optional
+        constraints : Dict[str, Tuple[Callable, Callable]], optional
             Pairs of functions (f, dfdx) corresponding to additional constraints.
         mask : Sequence[int] or Sequence[bool], optional
             List of parameters to freeze. If the list contains ints, then each element corresponds
@@ -204,16 +197,13 @@ class FanCI(metaclass=ABCMeta):
             at all (in which case ``wfn`` must already be filled).
 
         """
-        # Parse arguments
-        # ---------------
-
         # Generate constraints dict
         if constraints is None:
             constraints = OrderedDict()
         elif isinstance(constraints, dict):
             constraints = OrderedDict(constraints)
         else:
-            raise TypeError("`constraints` must be dictionary `{name: (f, dfdx)}`")
+            raise TypeError(f"Invalid `constraints` type `{type(constraints)}`; must be dictionary")
 
         # Add norm_det and norm_param constraints
         norm_param = list() if norm_param is None else norm_param
@@ -225,9 +215,6 @@ class FanCI(metaclass=ABCMeta):
             name = f"<\\psi_{{{index}}}|\\Psi> - v_{{{index}}}"
             constraints[name] = self.make_det_constraint(index, value)
 
-        # Number of nonlinear equations
-        nequation = nproj + len(constraints)
-
         # Generate mask (True for active parameter, False for frozen parameter)
         if mask is None:
             mask = np.ones(nparam, dtype=np.bool)
@@ -236,80 +223,28 @@ class FanCI(metaclass=ABCMeta):
             if mask.dtype == np.bool:
                 # Check length of boolean mask
                 if mask.size != nparam:
-                    raise ValueError("boolean mask must have length `nparam`")
+                    raise ValueError(f"Mask size is {mask.size}; must have size `nparam={nparam}`")
             else:
                 # Convert integer mask to boolean
                 ints = mask
                 mask = np.ones(nparam, dtype=np.bool)
                 mask[ints] = 0
 
-        # Number of active parameters
+        # Number of nonlinear equations and active parameters
+        nequation = nproj + len(constraints)
         nactive = mask.sum()
-
-        # Check if system is underdetermined
         if nequation < nactive:
-            raise ValueError("system is underdetermined")
+            raise ValueError(f"System is underdetermined with dimensions {nequation}, {nactive}")
 
         # Generate determinant spaces
-        # ---------------------------
+        wfn = fill_wavefunction(wfn, nproj, fill)
 
-        # Handle wfn parameter; decide values for generating determinants from its type
-        wfn = wfn.copy()
-        if isinstance(wfn, pyci.doci_wfn):
-            e_max = min(wfn.nocc_up, wfn.nvir_up)
-            s_min = 0
-            s_max = 0
-            connections = (1,)
-        elif isinstance(wfn, (pyci.fullci_wfn, pyci.genci_wfn)):
-            e_max = min(wfn.nocc, wfn.nvir)
-            s_min = wfn.nocc_up - wfn.nocc_dn
-            s_max = min(wfn.nocc_up, wfn.nvir_up)
-            connections = (1, 2)
-        else:
-            raise TypeError("`wfn` must be a `pyci.{doci,fullci,genci}_wfn`")
-
-        if fill is None:
-            # Don't fill wave function
-            pass
-
-        elif fill == 'excitation':
-            # Fill wfn with P space determinants in excitation order until len(wfn) >= nproj;
-            # only add Hartree-Fock det. (zero order excitation) if wfn is empty
-            for nexc in range(bool(len(wfn)), e_max + 1):
-                if len(wfn) >= nproj:
-                    break
-                pyci.add_excitations(wfn, nexc)
-
-        elif fill == 'seniority':
-            # Fill with determinants in increasing-seniority order
-            if isinstance(wfn, pyci.doci_wfn):
-                # doci_wfn only has seniority zero determinants; add them all
-                if len(wfn) < nproj:
-                    wfn.add_all_dets()
-            else:
-                # Valid seniorities increase by two from s_min
-                for nsen in range(s_min, s_max + 1, 2):
-                    if len(wfn) >= nproj:
-                        break
-                    pyci.add_seniorities(wfn, nsen)
-
-        if len(wfn) < nproj:
-            raise ValueError("unable to generate `nproj` determinants")
-
-        # Truncate wave function if we generated > nproj determinants
-        if len(wfn) > nproj:
-            wfn = wfn.truncated(nproj)
-
-        # Fill wfn with S space determinants
-        for det in wfn.to_det_array(nproj):
-            pyci.add_excitations(wfn, *connections, ref=det)
+        # Compute CI matrix operator with nproj rows and len(wfn) columns
+        ci_op = pyci.sparse_op(ham, wfn, nrow=nproj, ncol=len(wfn))
 
         # Compute arrays of occupations
         sspace = wfn.to_occ_array()
         pspace = sspace[:nproj]
-
-        # Compute CI matrix operator with nproj rows and len(wfn) columns
-        ci_op = pyci.sparse_op(ham, wfn, nproj)
 
         # Assign attributes to instance
         self._nequation = nequation
@@ -353,15 +288,15 @@ class FanCI(metaclass=ABCMeta):
             Result of optimization.
 
         """
-        # Check x0 vector length
-        if x0.size != self.nparam:
-            raise ValueError("length of `x0` does not match `param`")
         # Check if system is underdetermined
-        elif self.nequation < self.nactive:
+        if self.nequation < self.nactive:
             raise ValueError("system is underdetermined")
 
         # Convert x0 to proper dtype array
-        x0 = np.array(x0, dtype=pyci.c_double)
+        x0 = np.asarray(x0, dtype=pyci.c_double)
+        # Check input x0 length
+        if x0.size != self.nparam:
+            raise ValueError("length of `x0` does not match `param`")
 
         # Prepare objective, Jacobian, x0
         if self.nactive < self.nparam:
@@ -582,7 +517,7 @@ class FanCI(metaclass=ABCMeta):
         # Return Jacobian
         return jac
 
-    def make_param_constraint(self, i: int, val: float) -> Constraint:
+    def make_param_constraint(self, i: int, val: float) -> Tuple[Callable, Callable]:
         r"""
         Generate parameter constraint functions.
 
@@ -621,7 +556,7 @@ class FanCI(metaclass=ABCMeta):
 
         return f, dfdx
 
-    def make_det_constraint(self, i: int, val: float) -> Constraint:
+    def make_det_constraint(self, i: int, val: float) -> Tuple[Callable, Callable]:
         r"""
         Generate determinant overlap constraint functions.
 
@@ -692,9 +627,7 @@ class FanCI(metaclass=ABCMeta):
         return masked_f
 
     @abstractmethod
-    def compute_overlap(
-        self, x: np.ndarray, occs_array: Union[np.ndarray, str]
-    ) -> np.ndarray:
+    def compute_overlap(self, x: np.ndarray, occs_array: Union[np.ndarray, str]) -> np.ndarray:
         r"""
         Compute the FanCI overlap vector.
 
@@ -739,3 +672,72 @@ class FanCI(metaclass=ABCMeta):
         """
         raise NotImplementedError("this method must be overwritten in a sub-class")
 
+
+def fill_wavefunction(wfn: pyci.wavefunction, nproj: int, fill: str) -> None:
+    r"""
+    Fill the PyCI wave function object for the FanCI problem.
+
+    Helper function for ``FanCI.__init__``.
+
+    Parameters
+    ----------
+    wfn : pyci.wavefunction
+        PyCI wave function.
+    nproj : int
+        Number of determinants in projection ("P") space.
+    fill : ('excitation' | 'seniority' | None)
+        Whether to fill the projection ("P") space by excitation level, by seniority, or not
+        at all (in which case ``wfn`` must already be filled).
+
+    """
+    # Handle wfn parameter; decide values for generating determinants from its type
+    if isinstance(wfn, pyci.doci_wfn):
+        e_max = min(wfn.nocc_up, wfn.nvir_up)
+        s_min = 0
+        s_max = 0
+        connections = (1,)
+    elif isinstance(wfn, (pyci.fullci_wfn, pyci.genci_wfn)):
+        e_max = min(wfn.nocc, wfn.nvir)
+        s_min = wfn.nocc_up - wfn.nocc_dn
+        s_max = min(wfn.nocc_up, wfn.nvir_up)
+        connections = (1, 2)
+    else:
+        raise TypeError(f"invalid `wfn` type `{type(wfn)}`; must be `pyci.wavefunction`")
+
+    # Use new wavefunction; don't modify original object
+    wfn = wfn.__class__(wfn)
+
+    if fill == "excitation":
+        # Fill wfn with P space determinants in excitation order until len(wfn) >= nproj;
+        # only add Hartree-Fock det. (zero order excitation) if wfn is empty
+        # for nexc in range(bool(len(wfn)), e_max + 1):
+        for nexc in range(e_max + 1):
+            if len(wfn) >= nproj:
+                break
+            pyci.add_excitations(wfn, nexc)
+
+    elif fill == "seniority":
+        # Fill with determinants in increasing-seniority order
+        if isinstance(wfn, pyci.doci_wfn) and len(wfn) < nproj:
+            wfn.add_all_dets()
+        else:
+            # Valid seniorities increase by two from s_min
+            for nsen in range(s_min, s_max + 1, 2):
+                if len(wfn) >= nproj:
+                    break
+                pyci.add_seniorities(wfn, nsen)
+    elif fill is not None:
+        raise ValueError(f"Invalid `fill` value: '{fill}'")
+
+    if len(wfn) < nproj:
+        raise ValueError(f"unable to generate `nproj={nproj}` determinants")
+
+    # Truncate wave function if we generated > nproj determinants
+    if len(wfn) > nproj:
+        wfn = wfn.__class__(wfn.nbasis, wfn.nocc_up, wfn.nocc_dn, wfn.to_det_array(nproj))
+
+    # Fill wfn with S space determinants
+    for det in wfn.to_det_array(nproj):
+        pyci.add_excitations(wfn, *connections, ref=det)
+
+    return wfn

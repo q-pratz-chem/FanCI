@@ -9,12 +9,12 @@ from .derivcheck import assert_deriv
 
 
 __all__ = [
-    'find_datafile',
-    'assert_deriv',
-    ]
+    "find_datafile",
+    "assert_deriv",
+]
 
 
-DATAPATH = path.join(path.abspath(path.dirname(__file__)), 'data/')
+DATAPATH = path.join(path.abspath(path.dirname(__file__)), "data/")
 
 
 def find_datafile(filename):

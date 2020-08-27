@@ -1,13 +1,17 @@
-"""FANPT updater."""
-import numpy as np
-import pyci
+r"""FANPT updater."""
+
 from math import factorial
+
+import numpy as np
+
+import pyci
+
 from .base_fanpt_container import FANPTContainer
 from .fanpt_constant_terms import FANPTConstantTerms
 
 
 class FANPTUpdater:
-    """"Solve the FANPT equations up to a given order, updates the wavefunction parameters and
+    r"""Solve the FANPT equations up to a given order, updates the wavefunction parameters and
     energy.
 
     Attributes
@@ -72,8 +76,9 @@ class FANPTUpdater:
     fanpt_e_response(self)
         Return the energy calculated as the sum of the FANPT responses of the E variable.
     """
+
     def __init__(self, fanpt_container, final_order=1, final_l=1.0, solver=None, resum=False):
-        """Initialize the updater.
+        r"""Initialize the updater.
 
         Parameters
         ----------
@@ -106,7 +111,7 @@ class FANPTUpdater:
             self.fanpt_e_response()
 
     def assign_fanpt_container(self, fanpt_container):
-        """Assign the FANPT container.
+        r"""Assign the FANPT container.
 
         Parameters
         ----------
@@ -124,7 +129,7 @@ class FANPTUpdater:
         self.fanpt_container = fanpt_container
 
     def assign_resum(self, resum):
-        """Assign the value of resum.
+        r"""Assign the value of resum.
 
         Returns
         ------
@@ -148,7 +153,7 @@ class FANPTUpdater:
             self.resum = False
 
     def inverse_coeff_matrix(self):
-        """Return the inverse of the matrix of derivatives of the FANPT equations with respect to
+        r"""Return the inverse of the matrix of derivatives of the FANPT equations with respect to
         the active parameters.
 
         Returns
@@ -160,7 +165,7 @@ class FANPTUpdater:
         self.inverse = np.linalg.inv(self.fanpt_container.c_matrix)
 
     def resum_matrix(self):
-        """Return the matrix that appears in the resummation expressions.
+        r"""Return the matrix that appears in the resummation expressions.
 
         Returns
         -------
@@ -172,7 +177,7 @@ class FANPTUpdater:
         self.A_matrix = np.dot(self.inverse, self.fanpt_container.d2_g_lambda_wfnparams)
 
     def resum_vector(self):
-        """Return the vector that appears in the resummation expressions.
+        r"""Return the vector that appears in the resummation expressions.
 
         Returns
         -------
@@ -184,7 +189,7 @@ class FANPTUpdater:
         self.b_vector = np.dot(self.inverse, self.fanpt_container.d_g_lambda)
 
     def fanpt_resum_correction(self):
-        """Return the resummation of all the responses.
+        r"""Return the resummation of all the responses.
 
         Returns
         -------
@@ -194,13 +199,18 @@ class FANPTUpdater:
         -l * [(l * A + I)^-1] * b
         I : identity matrix
         """
-        self.resum_correction = -(self.final_l *
-                                  np.dot(np.linalg.inv(self.final_l * self.A_matrix
-                                         + np.identity(self.fanpt_container.nequation)),
-                                         self.b_vector))
+        self.resum_correction = -(
+            self.final_l
+            * np.dot(
+                np.linalg.inv(
+                    self.final_l * self.A_matrix + np.identity(self.fanpt_container.nequation)
+                ),
+                self.b_vector,
+            )
+        )
 
     def assign_final_order(self, final_order):
-        """Assign the final order.
+        r"""Assign the final order.
 
         Parameters
         ----------
@@ -221,7 +231,7 @@ class FANPTUpdater:
         self.final_order = final_order
 
     def assign_final_l(self, final_l):
-        """Assign the final lambda.
+        r"""Assign the final lambda.
 
         Parameters
         ----------
@@ -238,17 +248,20 @@ class FANPTUpdater:
         if not isinstance(final_l, float):
             raise TypeError("final_l must be given as a float.")
         if not self.fanpt_container.l < final_l <= 1.0:
-            raise ValueError("final_l must be greater than {} and lower or equal than 1.".format(
-                self.fanpt_container.l))
+            raise ValueError(
+                "final_l must be greater than {} and lower or equal than 1.".format(
+                    self.fanpt_container.l
+                )
+            )
         self.final_l = final_l
 
     def assign_solver(self, solver):
-        """Assign solver."""
+        r"""Assign solver."""
         if solver is None:
             self.solver = np.linalg.lstsq
 
     def get_responses(self):
-        """Find the responses up to the final order.
+        r"""Find the responses up to the final order.
 
         Returns
         -------
@@ -259,15 +272,17 @@ class FANPTUpdater:
         """
         resp_matrix = np.zeros((self.final_order, self.fanpt_container.nactive))
         for o in range(1, self.final_order + 1):
-            c_terms = FANPTConstantTerms(fanpt_container=self.fanpt_container, order=o,
-                                         previous_responses=resp_matrix[:o - 1, :])
+            c_terms = FANPTConstantTerms(
+                fanpt_container=self.fanpt_container,
+                order=o,
+                previous_responses=resp_matrix[: o - 1, :],
+            )
             constant_terms = c_terms.constant_terms
-            resp_matrix[o - 1] = self.solver(self.fanpt_container.c_matrix,
-                                             constant_terms)[0]
+            resp_matrix[o - 1] = self.solver(self.fanpt_container.c_matrix, constant_terms)[0]
         self.responses = resp_matrix
 
     def params_updater(self):
-        """Update the wavefunction parameters with the new responses up to the given value of
+        r"""Update the wavefunction parameters with the new responses up to the given value of
         final_lambda.
 
         Returns
@@ -286,8 +301,12 @@ class FANPTUpdater:
             corrections = self.resum_correction
         else:
             l0 = self.fanpt_container.l
-            dl = np.array([(self.final_l - l0) ** order/factorial(order)
-                           for order in range(1, self.final_order + 1)])
+            dl = np.array(
+                [
+                    (self.final_l - l0) ** order / factorial(order)
+                    for order in range(1, self.final_order + 1)
+                ]
+            )
             if self.fanpt_container.active_energy:
                 wfn_responses = self.responses[:, :-1]
             else:
@@ -299,7 +318,7 @@ class FANPTUpdater:
         self.new_wfn_params = wfn_params
 
     def energy_ham_ovlp_updater(self):
-        """"Update the energy, Hamiltonian sparse operator, and wavefunctoin overlaps.
+        r""""Update the energy, Hamiltonian sparse operator, and wavefunctoin overlaps.
 
         Generates
         ---------
@@ -314,25 +333,25 @@ class FANPTUpdater:
         -----
         This E satisfies the 2n + 1 rule.
         """
-        new_ham = FANPTContainer.linear_comb_ham(self.fanpt_container.ham1,
-                                                 self.fanpt_container.ham0,
-                                                 self.final_l,
-                                                 1 - self.final_l)
-        new_ham_op = pyci.sparse_op(new_ham, self.fanpt_container.fanci_wfn.wfn,
-                                    self.fanpt_container.nproj)
+        new_ham = FANPTContainer.linear_comb_ham(
+            self.fanpt_container.ham1, self.fanpt_container.ham0, self.final_l, 1 - self.final_l
+        )
+        new_ham_op = pyci.sparse_op(
+            new_ham, self.fanpt_container.fanci_wfn.wfn, self.fanpt_container.nproj
+        )
         new_ovlp_s = self.fanpt_container.fanci_wfn.compute_overlap(self.new_wfn_params, "S")
         f = np.empty(self.fanpt_container.nproj, dtype=pyci.c_double)
         new_ham_op(new_ovlp_s, out=f)
         if self.fanpt_container.inorm:
             energy = f[self.fanpt_container.ref_sd]
         else:
-            energy = f[self.fanpt_container.ref_sd]/new_ovlp_s[self.fanpt_container.ref_sd]
+            energy = f[self.fanpt_container.ref_sd] / new_ovlp_s[self.fanpt_container.ref_sd]
         self.new_energy = energy
         self.new_ham_op = new_ham_op
         self.new_ovlp_s = new_ovlp_s
 
     def fanpt_e_response(self):
-        """Return the energy calculated as the sum of the FANPT responses of the E variable.
+        r"""Return the energy calculated as the sum of the FANPT responses of the E variable.
 
         Generates
         ---------
@@ -346,7 +365,11 @@ class FANPTUpdater:
         """
         e0 = self.fanpt_container.energy
         l0 = self.fanpt_container.l
-        dl = np.array([(self.final_l - l0) ** order / factorial(order)
-                       for order in range(1, self.final_order + 1)])
+        dl = np.array(
+            [
+                (self.final_l - l0) ** order / factorial(order)
+                for order in range(1, self.final_order + 1)
+            ]
+        )
         e_responses = self.responses[:, -1]
         self.fanpt_e = e0 + np.sum(e_responses * dl)

@@ -22,7 +22,7 @@
 import numpy as np
 
 
-__all__ = ['diff_ridders', 'assert_deriv']
+__all__ = ["diff_ridders", "assert_deriv"]
 
 
 def diff_ridders(function, origin, stepsize, con=1.4, safe=2.0, maxiter=15):
@@ -60,17 +60,19 @@ def diff_ridders(function, origin, stepsize, con=1.4, safe=2.0, maxiter=15):
 
     """
     if stepsize == 0.0:
-        raise ValueError('stepsize must be nonzero.')
+        raise ValueError("stepsize must be nonzero.")
     if con <= 1.0:
-        raise ValueError('con must be larger than one.')
+        raise ValueError("con must be larger than one.")
     if safe <= 1.0:
-        raise ValueError('safe must be larger than one.')
+        raise ValueError("safe must be larger than one.")
 
-    con2 = con*con
-    table = [[(
-        np.asarray(function(origin + stepsize))
-        - np.asarray(function(origin - stepsize))
-    )/(2.0*stepsize)]]
+    con2 = con * con
+    table = [
+        [
+            (np.asarray(function(origin + stepsize)) - np.asarray(function(origin - stepsize)))
+            / (2.0 * stepsize)
+        ]
+    ]
     estimate = None
     error = None
 
@@ -81,23 +83,27 @@ def diff_ridders(function, origin, stepsize, con=1.4, safe=2.0, maxiter=15):
         # Reduce step size.
         stepsize /= con
         # First-order approximation at current step size.
-        table.append([(
-            np.asarray(function(origin + stepsize))
-            - np.asarray(function(origin - stepsize))
-        )/(2.0*stepsize)])
+        table.append(
+            [
+                (np.asarray(function(origin + stepsize)) - np.asarray(function(origin - stepsize)))
+                / (2.0 * stepsize)
+            ]
+        )
         # Compute higher-orders
         fac = con2
-        for j in range(1, i+1):
+        for j in range(1, i + 1):
             # Compute extrapolations of various orders, requiring no new
             # function evaluations. This is a recursion relation based on
             # Neville's method.
-            table[i].append((table[i][j-1]*fac - table[i-1][j-1])/(fac-1.0))
-            fac = con2*fac
+            table[i].append((table[i][j - 1] * fac - table[i - 1][j - 1]) / (fac - 1.0))
+            fac = con2 * fac
 
             # The error strategy is to compare each new extrapolation to one
             # order lower, both at the present stepsize and the previous one:
-            current_error = max(abs(table[i][j] - table[i][j-1]).max(),
-                                abs(table[i][j] - table[i-1][j-1]).max())
+            current_error = max(
+                abs(table[i][j] - table[i][j - 1]).max(),
+                abs(table[i][j] - table[i - 1][j - 1]).max(),
+            )
 
             # If error has decreased, save the improved estimate.
             if error is None or current_error <= error:
@@ -106,7 +112,7 @@ def diff_ridders(function, origin, stepsize, con=1.4, safe=2.0, maxiter=15):
 
         # If the highest-order estimate is growing larger than the error on the best
         # estimate, the algorithm becomes numerically instable. Time to quit.
-        if abs(table[i][i] - table[i-1][i-1]).max() >= safe * error:
+        if abs(table[i][i] - table[i - 1][i - 1]).max() >= safe * error:
             break
         i += 1
     return estimate, error
@@ -217,17 +223,19 @@ def assert_deriv(function, gradient, origin, widths=0.1, output_mask=None, rtol=
             deriv = gradient[..., iaxis]
             # Make sure the error on the derivative is smaller than the requested
             # thresholds.
-            if deriv_error >= atol and deriv_error >= rtol*abs(deriv).max():
-                raise FloatingPointError('Inaccurate estimate of the derivative for '
-                                         'index={}.'.format(indices))
+            if deriv_error >= atol and deriv_error >= rtol * abs(deriv).max():
+                raise FloatingPointError(
+                    "Inaccurate estimate of the derivative for " "index={}.".format(indices)
+                )
             # Flatten the array with numerical derivatives.
             if output_mask is None:
                 deriv_approx = deriv_approx.ravel()
             else:
                 deriv_approx = deriv_approx[output_mask]
             # Compare
-            err_msg = 'derivative toward {} x=analytic y=numeric stepsize={:g}'.format(
-                indices, stepsize)
+            err_msg = "derivative toward {} x=analytic y=numeric stepsize={:g}".format(
+                indices, stepsize
+            )
             np.testing.assert_allclose(deriv, deriv_approx, rtol, atol, err_msg=err_msg)
             numtested += deriv.size
     return numtested

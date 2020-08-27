@@ -1,10 +1,13 @@
-"""Class that contains the elements required to perform a FANPT calculation with implicit E"""
+r"""Class that contains the elements required to perform a FANPT calculation with implicit E."""
+
 import numpy as np
+
 from .fanpt_cont_e_param import FANPTContainerEParam
 
 
 class FANPTContainerEFree(FANPTContainerEParam):
-    """"Container for the matrices and vectors required ot perform a FANPT calculation.
+    r"""
+    Container for the matrices and vectors required ot perform a FANPT calculation.
 
     We assume that the equations to be solved have the following structure:
 
@@ -101,9 +104,21 @@ class FANPTContainerEFree(FANPTContainerEParam):
         Generate the coefficient matrix of the linear FANPT system of equations.
     """
 
-    def __init__(self, fanci_wfn, params, ham0, ham1, l=0, ref_sd=0, inorm=False,
-                 ham_ci_op=None, f_pot_ci_op=None, ovlp_s=None, d_ovlp_s=None):
-        """Initialize the FANPT container.
+    def __init__(
+        self,
+        fanci_wfn,
+        params,
+        ham0,
+        ham1,
+        l=0,
+        ref_sd=0,
+        inorm=False,
+        ham_ci_op=None,
+        f_pot_ci_op=None,
+        ovlp_s=None,
+        d_ovlp_s=None,
+    ):
+        r"""Initialize the FANPT container.
 
         Parameters
         ----------
@@ -132,11 +147,22 @@ class FANPTContainerEFree(FANPTContainerEParam):
         if fanci_wfn.mask[-1]:
             raise TypeError("The energy cannot be an active parameter.")
         else:
-            super().__init__(fanci_wfn, params, ham0, ham1, l, ref_sd, inorm,
-                             ham_ci_op, f_pot_ci_op, ovlp_s, d_ovlp_s)
+            super().__init__(
+                fanci_wfn,
+                params,
+                ham0,
+                ham1,
+                l,
+                ref_sd,
+                inorm,
+                ham_ci_op,
+                f_pot_ci_op,
+                ovlp_s,
+                d_ovlp_s,
+            )
 
     def der_g_lambda(self):
-        """Derivative of the FANPT equations with respect to the lambda parameter.
+        r"""Derivative of the FANPT equations with respect to the lambda parameter.
 
         dG/dl = <n|f_pot|psi(l)> - <ref|f_pot|psi(l)> * <n|psi(l)>
 
@@ -151,13 +177,16 @@ class FANPTContainerEFree(FANPTContainerEParam):
         super().der_g_lambda()
         self.super_d_g_lambda = self.d_g_lambda.copy()
         if self.inorm:
-            self.d_g_lambda[:self.nproj] -= self.d_g_lambda[self.ref_sd] * self.ovlp_s[:self.nproj]
+            self.d_g_lambda[: self.nproj] -= (
+                self.d_g_lambda[self.ref_sd] * self.ovlp_s[: self.nproj]
+            )
         else:
-            self.d_g_lambda[:self.nproj] -= self.d_g_lambda[self.ref_sd] *\
-                                            self.ovlp_s[:self.nproj]/self.ovlp_s[self.ref_sd]
+            self.d_g_lambda[: self.nproj] -= (
+                self.d_g_lambda[self.ref_sd] * self.ovlp_s[: self.nproj] / self.ovlp_s[self.ref_sd]
+            )
 
     def der2_g_lambda_wfnparams(self):
-        """Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
+        r"""Derivative of the FANPT equations with respect to lambda and the wavefunction parameters.
 
         d^2G/dldp_k = <n|f_pot|dpsi(l)/dp_k> - <ref|f_pot|dpsi(l)/dp_k> * <n|psi(l)>
                                              - <ref|f_pot|psi(l)> * <n|dpsi(l)/dp_k>
@@ -174,25 +203,31 @@ class FANPTContainerEFree(FANPTContainerEParam):
         """
         super().der2_g_lambda_wfnparams()
         if self.inorm:
-            self.d2_g_lambda_wfnparams[:self.nproj] -= self.d2_g_lambda_wfnparams[self.ref_sd] *\
-                                                       self.ovlp_s[:self.nproj].reshape(self.nproj,
-                                                                                        1)
-            self.d2_g_lambda_wfnparams[:self.nproj] -= self.super_d_g_lambda[self.ref_sd] * \
-                                                       self.d_ovlp_s[:self.nproj]
+            self.d2_g_lambda_wfnparams[: self.nproj] -= self.d2_g_lambda_wfnparams[
+                self.ref_sd
+            ] * self.ovlp_s[: self.nproj].reshape(self.nproj, 1)
+            self.d2_g_lambda_wfnparams[: self.nproj] -= (
+                self.super_d_g_lambda[self.ref_sd] * self.d_ovlp_s[: self.nproj]
+            )
         else:
-            self.d2_g_lambda_wfnparams[:self.nproj] -= (self.d2_g_lambda_wfnparams[self.ref_sd]
-                                                        - self.super_d_g_lambda[self.ref_sd] *
-                                                        self.d_ovlp_s[self.ref_sd] /
-                                                        self.ovlp_s[self.ref_sd]) * \
-                                                       self.ovlp_s[:self.nproj].reshape(self.nproj,
-                                                                                        1) /\
-                                                       self.ovlp_s[self.ref_sd]
-            self.d2_g_lambda_wfnparams[:self.nproj] -= self.super_d_g_lambda[self.ref_sd] * \
-                                                       self.d_ovlp_s[:self.nproj] /\
-                                                       self.ovlp_s[self.ref_sd]
+            self.d2_g_lambda_wfnparams[: self.nproj] -= (
+                (
+                    self.d2_g_lambda_wfnparams[self.ref_sd]
+                    - self.super_d_g_lambda[self.ref_sd]
+                    * self.d_ovlp_s[self.ref_sd]
+                    / self.ovlp_s[self.ref_sd]
+                )
+                * self.ovlp_s[: self.nproj].reshape(self.nproj, 1)
+                / self.ovlp_s[self.ref_sd]
+            )
+            self.d2_g_lambda_wfnparams[: self.nproj] -= (
+                self.super_d_g_lambda[self.ref_sd]
+                * self.d_ovlp_s[: self.nproj]
+                / self.ovlp_s[self.ref_sd]
+            )
 
     def gen_coeff_matrix(self):
-        """Generate the coefficient matrix of the linear FANPT system of equations.
+        r"""Generate the coefficient matrix of the linear FANPT system of equations.
 
         dG/dp_k = <n|ham(l)|dpsi(l)/dp_k> - E * <n|dpsi/dp_k>
                                           - <ref|ham(l)|dpsi(l)/dp_k> * <n|psi(l)>
@@ -215,10 +250,12 @@ class FANPTContainerEFree(FANPTContainerEParam):
         for f_proj_col, d_ovlp_col in zip(f_proj.transpose(), self.d_ovlp_s.transpose()):
             self.ham_ci_op(d_ovlp_col, out=f_proj_col)
         if self.inorm:
-            self.c_matrix[:self.nproj] -= f_proj[self.ref_sd] *\
-                                          self.ovlp_s[:self.nproj].reshape(self.nproj, 1)
+            self.c_matrix[: self.nproj] -= f_proj[self.ref_sd] * self.ovlp_s[: self.nproj].reshape(
+                self.nproj, 1
+            )
         else:
-            self.c_matrix[:self.nproj] -= (f_proj[self.ref_sd] -
-                                           self.energy * self.d_ovlp_s[self.ref_sd]) *\
-                                          self.ovlp_s[:self.nproj].reshape(self.nproj, 1) /\
-                                          self.ovlp_s[self.ref_sd]
+            self.c_matrix[: self.nproj] -= (
+                (f_proj[self.ref_sd] - self.energy * self.d_ovlp_s[self.ref_sd])
+                * self.ovlp_s[: self.nproj].reshape(self.nproj, 1)
+                / self.ovlp_s[self.ref_sd]
+            )
