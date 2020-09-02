@@ -1,5 +1,6 @@
 r"""FANPT updater."""
 
+from functools import partial
 from math import factorial
 
 import numpy as np
@@ -258,7 +259,7 @@ class FANPTUpdater:
     def assign_solver(self, solver):
         r"""Assign solver."""
         if solver is None:
-            self.solver = np.linalg.lstsq
+            self.solver = partial(np.linalg.lstsq, rcond=-1)
 
     def get_responses(self):
         r"""Find the responses up to the final order.

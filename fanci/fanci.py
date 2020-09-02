@@ -590,7 +590,7 @@ class FanCI(metaclass=ABCMeta):
             """
             y = np.zeros(self._nactive, dtype=pyci.c_double)
             d_ovlp = self.compute_overlap_deriv(x[:-1], self._sspace[np.newaxis, i])[0]
-            y[: self._nactive - self._mask[i]] = d_ovlp
+            y[: self._nactive - self._mask[-1]] = d_ovlp
             return y
 
         return f, dfdx

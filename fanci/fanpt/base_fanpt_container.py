@@ -221,7 +221,7 @@ class FANPTContainer(metaclass=ABCMeta):
         ecore = a1 * ham1.ecore + a0 * ham0.ecore
         one_mo = a1 * ham1.one_mo + a0 * ham0.one_mo
         two_mo = a1 * ham1.two_mo + a0 * ham0.two_mo
-        return pyci.restricted_ham(ecore, one_mo, two_mo)
+        return pyci.hamiltonian(ecore, one_mo, two_mo)
 
     @property
     def nactive(self):

@@ -112,9 +112,10 @@ def test_detratio_compute_objective(dummy_system):
     ham, nocc, params = dummy_system
     numerator = 1
     denominator = 1
+    nmatrices = numerator + denominator
     detratio = DetRatio(ham, nocc, numerator, denominator)
 
-    nproj = 2 * ham.nbasis * nocc + 1
+    nproj = nmatrices * ham.nbasis * nocc + 1
     objective = detratio.compute_objective(params)
     op = pyci.sparse_op(detratio.ham, detratio.wfn, nproj)
     ovlp = detratio.compute_overlap(params[:-1], detratio.sspace)
@@ -133,29 +134,33 @@ def test_detratio_compute_jacobian(dummy_system):
 
 
 def systems_ground():
+    # nocc, system, E_nucnuc, E_hf(electr), normdet, E_ci(electr)
     options_list = [
-        (2, "be_ccpvdz", 0.0, -14.57233, [(0, 1.0)], (4 * 14 + 1), -14.600556994),
+        (2, "be_ccpvdz", 0.0, -14.57233, [(0, 1.0)], -14.600556994),
+        (2, "lih_631g", 0.0, -8.97458, [(0, 1.0)], -8.983534447),
+        (3, "li2_631g", 1.73944, -16.60559, [(0, 1.0)], -16.620149348),
     ]
     for p in options_list:
         yield p
 
 
 # @pytest.mark.slow
-@pytest.mark.parametrize("nocc, system, nucnuc, e_hf, normdet, nproj, expected", systems_ground())
-def test_detratio_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, expected):
+@pytest.mark.parametrize("nocc, system, nucnuc, e_hf, normdet, expected", systems_ground())
+def test_detratio_systems_ground(nocc, system, nucnuc, e_hf, normdet, expected):
     """Test cases adapted from FanCI's test_wfn_geminal_apig.
 
     """
     ham = pyci.hamiltonian(find_datafile("{0:s}.fcidump".format(system)))
     numerator = 1
     denominator = 1
-    nmatrices = numerator + denominator
+    nmtrx = numerator + denominator
+    nproj = nocc * ham.nbasis * nmtrx + 1
     detratio = DetRatio(ham, nocc, numerator, denominator, nproj=nproj, norm_det=normdet)
 
     # Make initial guess.
     # Based on FanPy's DeterminantRatio template_params()
     # Add random numbers on virtual orbital matrix positions.
-    params = np.zeros((nmatrices * ham.nbasis * nocc + 1), dtype=pyci.c_double)
+    params = np.zeros(detratio.nparam, dtype=pyci.c_double)
     params[-1] = e_hf
     params[:-1].reshape(-1, ham.nbasis, nocc)[0, :, :] = np.eye(ham.nbasis, nocc)
     params[:-1].reshape(-1, ham.nbasis, nocc)[1, :, :] = np.eye(ham.nbasis, nocc)
@@ -165,5 +170,5 @@ def test_detratio_systems_ground(nocc, system, nucnuc, e_hf, normdet, nproj, exp
     params[:-1] += 0.001 * np.random.rand(*params[:-1].shape)
 
     results = detratio.optimize(params, use_jac=True)
-    detratio_energy = results.x[-1] + nucnuc
+    detratio_energy = results.x[-1]
     assert np.allclose(detratio_energy, expected)
