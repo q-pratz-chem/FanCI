@@ -7,13 +7,15 @@ from abc import ABCMeta, abstractmethod
 
 from collections import OrderedDict
 
-from typing import Any, Callable, Dict, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 
 from scipy.optimize import OptimizeResult, least_squares, root
 
 import pyci
+
+from .alias import Alias
 
 
 __all__ = [
@@ -331,6 +333,83 @@ class FanCI(metaclass=ABCMeta):
         # Run optimizer
         return optimizer(*opt_args, **opt_kwargs)
 
+    def optimize_stochastic(
+        self,
+        nsamp: int,
+        x0: np.ndarray,
+        mode: str = "lstsq",
+        use_jac: bool = False,
+        fill: str = "excitation",
+        **kwargs: Any,
+    ) -> List[Tuple[np.ndarray]]:
+        r"""
+        Run a stochastic optimization of a FanCI wave function.
+
+        Parameters
+        ----------
+        nsamp: int
+            Number of samples to compute.
+        x0 : np.ndarray
+            Initial guess for wave function parameters.
+        mode : ('lstsq' | 'root' | 'cma'), default='lstsq'
+            Solver mode.
+        use_jac : bool, default=False
+            Whether to use the Jacobian function or a finite-difference approximation.
+        fill : ('excitation' | 'seniority' | None)
+            Whether to fill the projection ("P") space by excitation level, by seniority, or not
+            at all (in which case ``wfn`` must already be filled).
+        kwargs : Any, optional
+            Additional keyword arguments to pass to optimizer.
+
+        Returns
+        -------
+        result : List[Tuple[np.ndarray]]
+            List of (occs, coeffs, params) vectors for each solution.
+
+        """
+        # Get wave function information
+        ham = self._ham
+        nproj = self._nproj
+        nparam = self._nparam
+        nbasis = self._wfn.nbasis
+        nocc_up = self._wfn.nocc_up
+        nocc_dn = self._wfn.nocc_dn
+        constraints = self._constraints
+        mask = self._mask
+        ci_cls = self._wfn.__class__
+        # Start at sample 1
+        isamp = 1
+        result = []
+        # Iterate until nsamp samples are reached
+        while True:
+            # Optimize this FanCI wave function and get the result
+            opt = self.optimize(x0, mode=mode, use_jac=use_jac, **kwargs)
+            x0 = opt.x
+            coeffs = self.compute_overlap(x0[:-1], "S")
+            # Add the result to our list
+            result.append((np.copy(self.sspace), coeffs, x0))
+            # Check if we're done manually each time; this avoids an extra
+            # CI matrix preparation with an equivalent "for" loop
+            if isamp >= nsamp:
+                return result
+            # Try to get the garbage collector to remove the old CI matrix
+            del self._ci_op
+            self._ci_op = None
+            # Make new FanCI wave function in-place
+            FanCI.__init__(
+                self,
+                ham,
+                # Generate new determinants from "S" space via alias method
+                ci_cls(nbasis, nocc_up, nocc_dn, self.sspace[Alias(np.abs(coeffs))(nproj)]),
+                nproj,
+                nparam,
+                constraints=constraints,
+                mask=mask,
+                fill=fill,
+            )
+            # Go to next iteration
+            isamp += 1
+
     def add_constraint(self, name: str, f: Callable, dfdx: Callable = None) -> None:
         r"""
         Add a constraint to the system.
@@ -538,7 +617,7 @@ class FanCI(metaclass=ABCMeta):
         """
 
         def f(x: np.ndarray) -> float:
-            r""""
+            r""" "
             Constraint function p_{i} - v_{i}.
 
             """
@@ -577,14 +656,14 @@ class FanCI(metaclass=ABCMeta):
         """
 
         def f(x: np.ndarray) -> float:
-            r""""
+            r""" "
             Constraint function <\psi_{i}|\Psi> - v_{i}.
 
             """
             return self.compute_overlap(x[:-1], self._sspace[np.newaxis, i])[0] - val
 
         def dfdx(x: np.ndarray) -> np.ndarray:
-            r""""
+            r""" "
             Constraint gradient d(<\psi_{i}|\Psi>)/d(p_{k}).
 
             """
